@@ -469,7 +469,7 @@ async fn main() -> Result<()> {
 
             // 설정이 올바른 경우 도움말 표시
             display_logo(env!("CARGO_PKG_VERSION"));
-            Cli::try_parse_from(&["airun", "--help"])?;
+            Cli::try_parse_from(&["codai", "--help"])?;
             Ok(())
         }
         Some(Commands::Chat { message, provider, model }) => {

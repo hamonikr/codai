@@ -255,11 +255,11 @@ pub async fn execute_task(
                     println!("\n✓ Code generated successfully. Executing...");
                     
                     let mut executor = CodeExecutor::new(
-                        PathBuf::from(format!("{}/.airun-venv", std::env::var("HOME").unwrap_or_else(|_| "~".to_string()))),
+                        PathBuf::from(format!("{}/.codai-venv", std::env::var("HOME").unwrap_or_else(|_| "~".to_string()))),
                         if cfg!(windows) {
-                            PathBuf::from(format!("{}/.airun-venv/Scripts/python.exe", std::env::var("HOME").unwrap_or_else(|_| "~".to_string())))
+                            PathBuf::from(format!("{}/.codai-venv/Scripts/python.exe", std::env::var("HOME").unwrap_or_else(|_| "~".to_string())))
                         } else {
-                            PathBuf::from(format!("{}/.airun-venv/bin/python", std::env::var("HOME").unwrap_or_else(|_| "~".to_string())))
+                            PathBuf::from(format!("{}/.codai-venv/bin/python", std::env::var("HOME").unwrap_or_else(|_| "~".to_string())))
                         }
                     );
                     

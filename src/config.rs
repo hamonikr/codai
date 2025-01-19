@@ -278,7 +278,7 @@ pub enum SystemRequirementError {
 pub fn setup_config() -> Result<()> {
     let mut config = Config::load()?;
     
-    println!("\nWelcome to AI.RUN CLI Setup Wizard!");
+    println!("\nWelcome to Codai CLI Setup Wizard!");
     println!("Use arrow keys to navigate and Enter to select.\n");
 
     // Select AI service provider

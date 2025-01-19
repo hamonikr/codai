@@ -2,7 +2,7 @@
 name = "codai"
 version = "0.2.0"
 edition = "2021"
-authors = ["HamoniKR <hamonikr@gmail.com>"]
+authors = ["HamoniKR <chaeya@gmail.com>"]
 description = "AI-powered CLI tool for developers"
 license = "MIT"
 repository = "https://github.com/hamonikr/codai"
