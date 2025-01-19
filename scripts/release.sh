@@ -30,13 +30,13 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
-# Check differences between master and dev branches
-git fetch origin master dev
-MASTER_HEAD=$(git rev-parse origin/master)
+# Check differences between main and dev branches
+git fetch origin main dev
+MAIN_HEAD=$(git rev-parse origin/main)
 DEV_HEAD=$(git rev-parse origin/dev)
 
-if [ "$MASTER_HEAD" == "$DEV_HEAD" ]; then
-    echo -e "${RED}Error: master branch and dev branch are identical.${NC}"
+if [ "$MAIN_HEAD" == "$DEV_HEAD" ]; then
+    echo -e "${RED}Error: main branch and dev branch are identical.${NC}"
     echo -e "${YELLOW}No new changes to release.${NC}"
     exit 1
 fi
@@ -108,7 +108,7 @@ grep "^version = " Cargo.toml
 
 # Show changes summary
 echo -e "\n${YELLOW}Changes summary:${NC}"
-git --no-pager log --oneline origin/master..origin/dev
+git --no-pager log --oneline origin/main..origin/dev
 
 echo -e "\n${YELLOW}Current version: ${NC}$CURRENT_VERSION"
 echo -e "${YELLOW}New version: ${NC}$NEW_VERSION"
@@ -129,11 +129,11 @@ git add Cargo.toml Cargo.lock
 git commit -m "chore: bump version to ${NEW_VERSION}"
 
 # Execute release process
-echo -e "\n${YELLOW}1. Switching to master branch${NC}"
-git checkout master
+echo -e "\n${YELLOW}1. Switching to main branch${NC}"
+git checkout main
 
-echo -e "\n${YELLOW}2. Updating master branch${NC}"
-git pull origin master
+echo -e "\n${YELLOW}2. Updating main branch${NC}"
+git pull origin main
 
 echo -e "\n${YELLOW}3. Merging dev branch${NC}"
 git merge dev
@@ -142,7 +142,7 @@ echo -e "\n${YELLOW}4. Creating new tag${NC}"
 git tag -a $NEW_VERSION -m "Release $NEW_VERSION"
 
 echo -e "\n${YELLOW}5. Pushing changes${NC}"
-git push origin master
+git push origin main
 
 echo -e "\n${YELLOW}6. Pushing tag${NC}"
 git push origin $NEW_VERSION
@@ -150,8 +150,8 @@ git push origin $NEW_VERSION
 echo -e "\n${YELLOW}7. Returning to dev branch${NC}"
 git checkout dev
 
-echo -e "\n${YELLOW}8. Syncing master changes to dev branch${NC}"
-git merge master
+echo -e "\n${YELLOW}8. Syncing main changes to dev branch${NC}"
+git merge main
 git push origin dev
 
 echo -e "\n${GREEN}✨ Release completed! ($NEW_VERSION)${NC}"
