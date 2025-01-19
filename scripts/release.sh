@@ -115,25 +115,17 @@ echo -e "${YELLOW}New version: ${NC}$NEW_VERSION"
 echo -e "\n${GREEN}Starting release process...${NC}"
 
 # User confirmation
-echo -e "\n${YELLOW}Continue with release? (y/N):${NC}"
-while true; do
-    read -n 1 -r input
-    echo
-    # Check if input is ASCII
-    if [[ "$input" =~ [[:ascii:]] ]]; then
-        if [[ "$input" =~ ^[Yy]$ ]]; then
-            break
-        elif [[ "$input" =~ ^[Nn]$ ]] || [[ -z "$input" ]]; then
-            echo -e "${RED}Release cancelled.${NC}"
-            # Revert Cargo.toml and Cargo.lock changes
-            echo -e "${YELLOW}Reverting Cargo.toml and Cargo.lock changes...${NC}"
-            git checkout -- Cargo.toml Cargo.lock
-            echo -e "${GREEN}Changes reverted successfully.${NC}"
-            exit 1
-        fi
-    fi
-    echo -e "${RED}Please enter 'y' or 'n' (ASCII only)${NC}"
-done
+echo -e "\n${YELLOW}Please enter 'y' or 'n' (영문으로 입력해주세요):${NC}"
+read -p "Do you want to continue? (y/N) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${RED}Release cancelled.${NC}"
+    # Revert Cargo.toml and Cargo.lock changes
+    echo -e "${YELLOW}Reverting Cargo.toml and Cargo.lock changes...${NC}"
+    git checkout -- Cargo.toml Cargo.lock
+    echo -e "${GREEN}Changes reverted successfully.${NC}"
+    exit 1
+fi
 
 # Commit Cargo.toml changes
 echo -e "\n${YELLOW}Updating Cargo.toml and Cargo.lock${NC}"
