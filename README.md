@@ -96,6 +96,13 @@ For cloud-based AI providers, you'll need API keys:
 
 ## Installation
 
+### Using Cargo
+
+The simplest installation method:
+```bash
+cargo install codai
+```
+
 ### From Binary
 
 1. Download the latest release from [GitHub Releases](https://github.com/hamonikr/codai/releases)
