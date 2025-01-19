@@ -12,13 +12,13 @@ mod tests {
     #[test]
     fn test_cli_commands() {
         // --setup 명령어 테스트
-        let args = vec!["airun-cli", "--setup"];
+        let args = vec!["codai", "--setup"];
         let cli = Cli::try_parse_from(args).expect("Failed to parse setup command");
         assert!(cli.setup == true);
         assert!(cli.command.is_none());
 
         // chat 명령어 테스트
-        let args = vec!["airun-cli", "chat", "Hello", "--provider", "openai", "--model", "gpt-3.5-turbo"];
+        let args = vec!["codai", "chat", "Hello", "--provider", "openai", "--model", "gpt-3.5-turbo"];
         let cli = Cli::try_parse_from(args).expect("Failed to parse chat command with options");
         if let Some(cmd) = cli.command {
             match cmd {
@@ -33,7 +33,7 @@ mod tests {
 
         // code 명령어 테스트
         let args = vec![
-            "airun-cli", "code", "print hello",
+            "codai", "code", "print hello",
             "--language", "python",
             "--run",
             "--provider", "openai",
@@ -55,7 +55,7 @@ mod tests {
         }
 
         // config 명령어 테스트
-        let args = vec!["airun-cli", "config", "openai_api_key", "test_key"];
+        let args = vec!["codai", "config", "openai_api_key", "test_key"];
         let cli = Cli::try_parse_from(args).expect("Failed to parse config command");
         if let Some(cmd) = cli.command {
             match cmd {

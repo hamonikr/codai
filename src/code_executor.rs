@@ -28,7 +28,7 @@ lazy_static! {
         if let Ok(content) = fs::read_to_string(
             dirs::config_dir()
                 .unwrap_or_else(|| PathBuf::from("~/.config"))
-                .join("airun-cli")
+                .join("codai")
                 .join("package_mappings.json")
         ) {
             if let Ok(json) = serde_json::from_str::<Value>(&content) {
@@ -101,7 +101,7 @@ impl CodeExecutor {
         
         let temp_dir = dirs::cache_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find cache directory"))?
-            .join("airun-cli");
+            .join("codai");
         fs::create_dir_all(&temp_dir)?;
 
         let file_path = temp_dir.join("temp_code.py");
@@ -254,7 +254,7 @@ impl CodeExecutor {
     fn save_package_mapping(&self, original: &str, mapped: &str) -> Result<()> {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("airun-cli");
+            .join("codai");
         
         fs::create_dir_all(&config_dir)?;
         let mapping_file = config_dir.join("package_mappings.json");
@@ -353,7 +353,7 @@ pub async fn execute_python_code(
     provider: &Option<String>,
 ) -> Result<ExecutionResult> {
     let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-    let venv_path = home_dir.join(".airun-venv");
+    let venv_path = home_dir.join(".codai-venv");
     let python_path = if cfg!(windows) {
         venv_path.join("Scripts").join("python.exe")
     } else {

@@ -30,22 +30,22 @@ jobs:
       - name: Upload Linux x86_64 Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-linux-x86_64
-          path: target/x86_64-unknown-linux-gnu/release/airun-cli
+          name: codai-linux-x86_64
+          path: target/x86_64-unknown-linux-gnu/release/codai
           retention-days: 3
 
       - name: Upload Linux ARM64 Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-linux-arm64
-          path: target/aarch64-unknown-linux-gnu/release/airun-cli
+          name: codai-linux-arm64
+          path: target/aarch64-unknown-linux-gnu/release/codai
           retention-days: 3
 
       - name: Upload Linux ARM32 Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-linux-arm32
-          path: target/arm-unknown-linux-gnueabihf/release/airun-cli
+          name: codai-linux-arm32
+          path: target/arm-unknown-linux-gnueabihf/release/codai
           retention-days: 3
 
   build-windows:
@@ -65,8 +65,8 @@ jobs:
       - name: Upload Windows Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-windows
-          path: target/x86_64-pc-windows-msvc/release/airun-cli.exe
+          name: codai-windows
+          path: target/x86_64-pc-windows-msvc/release/codai.exe
           retention-days: 3
 
   build-macos:
@@ -87,15 +87,15 @@ jobs:
       - name: Upload macOS x86_64 Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-macos-x86_64
-          path: target/x86_64-apple-darwin/release/airun-cli
+          name: codai-macos-x86_64
+          path: target/x86_64-apple-darwin/release/codai
           retention-days: 3
 
       - name: Upload macOS ARM64 Release Asset
         uses: actions/upload-artifact@v4
         with:
-          name: airun-cli-macos-arm64
-          path: target/aarch64-apple-darwin/release/airun-cli
+          name: codai-macos-arm64
+          path: target/aarch64-apple-darwin/release/codai
           retention-days: 3
 
   release:
@@ -115,58 +115,58 @@ jobs:
           stripGeneratorNotice: "true"
           output: CHANGELOG.md
           user: "chaeya"
-          project: "airun-cli"
+          project: "codai"
 
       - name: Download Linux x86_64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-linux-x86_64
+          name: codai-linux-x86_64
           path: dist
 
       - name: Download Linux ARM64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-linux-arm64
+          name: codai-linux-arm64
           path: dist
 
       - name: Download Linux ARM32 artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-linux-arm32
+          name: codai-linux-arm32
           path: dist
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-windows
+          name: codai-windows
           path: dist
 
       - name: Download macOS x86_64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-macos-x86_64
+          name: codai-macos-x86_64
           path: dist
 
       - name: Download macOS ARM64 artifact
         uses: actions/download-artifact@v4
         with:
-          name: airun-cli-macos-arm64
+          name: codai-macos-arm64
           path: dist
 
       - name: Rename artifacts
         run: |
           cd dist
-          mv airun-cli airun-cli-linux-x86_64
-          chmod +x airun-cli-linux-x86_64
-          mv airun-cli-linux-arm64 airun-cli-linux-arm64
-          chmod +x airun-cli-linux-arm64
-          mv airun-cli-linux-arm32 airun-cli-linux-arm32
-          chmod +x airun-cli-linux-arm32
-          mv airun-cli.exe airun-cli-windows.exe
-          mv airun-cli-macos-x86_64 airun-cli-macos-x86_64
-          chmod +x airun-cli-macos-x86_64
-          mv airun-cli-macos-arm64 airun-cli-macos-arm64
-          chmod +x airun-cli-macos-arm64
+          mv codai codai-linux-x86_64
+          chmod +x codai-linux-x86_64
+          mv codai-linux-arm64 codai-linux-arm64
+          chmod +x codai-linux-arm64
+          mv codai-linux-arm32 codai-linux-arm32
+          chmod +x codai-linux-arm32
+          mv codai.exe codai-windows.exe
+          mv codai-macos-x86_64 codai-macos-x86_64
+          chmod +x codai-macos-x86_64
+          mv codai-macos-arm64 codai-macos-arm64
+          chmod +x codai-macos-arm64
 
       - name: Delete existing draft releases
         uses: hugo19941994/delete-draft-releases@v1.0.1
@@ -177,12 +177,12 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/airun-cli-linux-x86_64
-            dist/airun-cli-linux-arm64
-            dist/airun-cli-linux-arm32
-            dist/airun-cli-windows.exe
-            dist/airun-cli-macos-x86_64
-            dist/airun-cli-macos-arm64
+            dist/codai-linux-x86_64
+            dist/codai-linux-arm64
+            dist/codai-linux-arm32
+            dist/codai-windows.exe
+            dist/codai-macos-x86_64
+            dist/codai-macos-arm64
             CHANGELOG.md
           body_path: CHANGELOG.md
         env:

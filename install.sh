@@ -30,7 +30,7 @@ detect_os() {
         Linux*)     os="linux";;
         Darwin*)    os="macos";;
         MINGW*|MSYS*|CYGWIN*) 
-            print_error "Windows installation via script is not supported. Please download airun-cli-windows.exe from: https://github.com/chaeya/airun-cli/releases"
+            print_error "Windows installation via script is not supported. Please download codai-windows.exe from: https://github.com/hamonikr/codai/releases"
             exit 1
             ;;
         *)
@@ -146,9 +146,9 @@ create_directories() {
     local config_dir
 
     if [ "$(uname -s)" = "Darwin" ]; then
-        config_dir="$HOME/Library/Application Support/airun-cli"
+        config_dir="$HOME/Library/Application Support/codai"
     else
-        config_dir="$HOME/.config/airun-cli"
+        config_dir="$HOME/.config/codai"
     fi
 
     mkdir -p "$config_dir"
@@ -160,7 +160,7 @@ install_binary() {
     local os_arch=$1
     local tmp_dir
     local install_dir
-    local binary_name="airun-cli"
+    local binary_name="codai"
     
     # Determine installation directory
     if [ "$(id -u)" -eq 0 ]; then
@@ -180,14 +180,14 @@ install_binary() {
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "$tmp_dir"' EXIT
 
-    print_status "Downloading airun-cli for ${os_arch}..."
+    print_status "Downloading codai for ${os_arch}..."
     
     # Get the latest release URL
-    local latest_release_url="https://github.com/chaeya/airun-cli/releases/latest/download/airun-cli-${os_arch}"
+    local latest_release_url="https://github.com/hamonikr/codai/releases/latest/download/codai-${os_arch}"
     
     # Download binary
     if ! curl -sSL "$latest_release_url" -o "$tmp_dir/$binary_name"; then
-        print_error "Failed to download airun-cli"
+        print_error "Failed to download codai"
         exit 1
     fi
 
@@ -199,12 +199,12 @@ install_binary() {
         mv "$tmp_dir/$binary_name" "$install_dir/"
     fi
 
-    print_status "Successfully installed airun-cli to $install_dir/$binary_name"
+    print_status "Successfully installed codai to $install_dir/$binary_name"
 }
 
 # Main installation process
 main() {
-    print_status "Starting airun-cli installation..."
+    print_status "Starting codai installation..."
     
     # Check for required tools
     check_requirements
@@ -222,7 +222,7 @@ main() {
     
     # Final setup
     print_status "Installation completed successfully!"
-    print_status "To get started, run: airun-cli --help"
+    print_status "To get started, run: codai --help"
     
     # Notify about shell restart
     print_warning "Please restart your shell or run 'source ~/.bashrc' (or ~/.zshrc) to update your PATH"

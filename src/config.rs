@@ -62,15 +62,15 @@ impl Config {
     pub fn load() -> Result<Self> {
         let config_dir = if cfg!(target_os = "windows") {
             dirs::config_dir().unwrap_or_else(|| PathBuf::from("%APPDATA%"))
-                .join("airun-cli")
+                .join("codai")
         } else if cfg!(target_os = "macos") {
             dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"))
                 .join("Library")
                 .join("Application Support")
-                .join("airun-cli")
+                .join("codai")
         } else {
             dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config"))
-                .join("airun-cli")
+                .join("codai")
         };
 
         std::fs::create_dir_all(&config_dir)?;
@@ -87,15 +87,15 @@ impl Config {
     pub fn save(&self) -> Result<()> {
         let config_dir = if cfg!(target_os = "windows") {
             dirs::config_dir().unwrap_or_else(|| PathBuf::from("%APPDATA%"))
-                .join("airun-cli")
+                .join("codai")
         } else if cfg!(target_os = "macos") {
             dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"))
                 .join("Library")
                 .join("Application Support")
-                .join("airun-cli")
+                .join("codai")
         } else {
             dirs::config_dir().unwrap_or_else(|| PathBuf::from("~/.config"))
-                .join("airun-cli")
+                .join("codai")
         };
 
         std::fs::create_dir_all(&config_dir)?;
@@ -255,7 +255,7 @@ pub fn is_config_exists() -> bool {
 
 pub fn get_config_path() -> PathBuf {
     let mut config_dir = dirs::config_dir().expect("Could not find configuration directory");
-    config_dir.push("airun-cli");
+    config_dir.push("codai");
     std::fs::create_dir_all(&config_dir).expect("Could not create configuration directory");
     config_dir.push("config.toml");
     config_dir
@@ -374,8 +374,8 @@ pub fn setup_config() -> Result<()> {
     if cfg!(target_os = "windows") {
         println!("\n{}", "Configuration saved successfully!".green());
         println!("\nConfiguration file location:");
-        println!("%APPDATA%\\airun-cli\\config.toml");
-        println!("(Usually at C:\\Users\\username\\AppData\\Roaming\\airun-cli\\config.toml)");
+        println!("%APPDATA%\\codai\\config.toml");
+        println!("(Usually at C:\\Users\\username\\AppData\\Roaming\\codai\\config.toml)");
         println!("\nTo manually modify settings, open the above file with Notepad or another text editor and edit in this format:");
         println!("default_provider = \"{}\"  # AI provider (openai, anthropic, gemini, groq, ollama)", config.default_provider.as_ref().unwrap_or(&"openai".to_string()));
         println!("default_model = \"{}\"     # Model to use", config.default_model.as_ref().unwrap_or(&"gpt-3.5-turbo".to_string()));

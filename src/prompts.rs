@@ -7,13 +7,13 @@ use anyhow::Result;
 
 fn get_config_dir() -> Option<PathBuf> {
     if let Some(config_dir) = dirs::config_dir() {
-        let airun_config_dir = config_dir.join("airun-cli");
-        if !airun_config_dir.exists() {
-            if let Err(_) = fs::create_dir_all(&airun_config_dir) {
+        let codai_config_dir = config_dir.join("codai");
+        if !codai_config_dir.exists() {
+            if let Err(_) = fs::create_dir_all(&codai_config_dir) {
                 return None;
             }
         }
-        Some(airun_config_dir)
+        Some(codai_config_dir)
     } else {
         None
     }
