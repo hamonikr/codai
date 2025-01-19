@@ -1,6 +1,6 @@
 [package]
 name = "codai"
-version = "1.0.6"
+version = "1.0.7"
 edition = "2021"
 authors = ["HamoniKR <chaeya@gmail.com>"]
 description = "AI-powered CLI tool for developers"
