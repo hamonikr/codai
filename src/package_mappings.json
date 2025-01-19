@@ -1,0 +1,11 @@
+{
+    "PIL": "pillow",
+    "sklearn": "scikit-learn",
+    "bs4": "beautifulsoup4",
+    "tensorflow": "tensorflow",
+    "cv2": "opencv-python",
+    "yaml": "pyyaml",
+    "wx": "wxPython",
+    "tk": "tkinter",
+    "dotenv": "python-dotenv"
+} 

@@ -1,0 +1,1 @@
+"create a simple web scraper using requests and beautifulsoup4 to get headlines from news.google.com"

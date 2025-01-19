@@ -1,0 +1,39 @@
+# Rust 빌드 디렉토리
+/target/
+debug/
+release/
+other-proj/
+
+# IDE 설정 파일
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 환경 설정 파일
+.env
+.env.local
+config.local.toml
+
+# 로그 파일
+*.log
+
+# 바이너리 파일
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 임시 파일
+*.tmp
+*.bak
+*~
+
+# Rust 관련 파일
+Cargo.lock
+**/*.rs.bk
+
+# 릴리즈 디렉토리
+/dist/
+/release/
