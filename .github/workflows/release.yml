@@ -105,34 +105,52 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: codai-linux-x86_64
-          path: dist
+          path: dist/linux
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: codai-windows
-          path: dist
+          path: dist/windows
 
       - name: Download macOS x86_64 artifact
         uses: actions/download-artifact@v4
         with:
           name: codai-macos-x86_64
-          path: dist
+          path: dist/macos-x86_64
 
       - name: Download macOS ARM64 artifact
         uses: actions/download-artifact@v4
         with:
           name: codai-macos-arm64
-          path: dist
+          path: dist/macos-arm64
 
-      - name: Rename artifacts
+      - name: Prepare release files
         run: |
-          cd dist
-          chmod +x codai
-          mv codai codai-linux-x86_64
-          chmod +x codai-linux-x86_64
-          chmod +x codai-macos-x86_64
-          chmod +x codai-macos-arm64
+          mkdir -p dist/release
+          # Linux
+          if [ -f "dist/linux/codai" ]; then
+            cp dist/linux/codai dist/release/codai-linux-x86_64
+            chmod +x dist/release/codai-linux-x86_64
+          fi
+          # Windows
+          if [ -f "dist/windows/codai.exe" ]; then
+            cp dist/windows/codai.exe dist/release/codai-windows.exe
+          fi
+          # macOS x86_64
+          if [ -f "dist/macos-x86_64/codai" ]; then
+            cp dist/macos-x86_64/codai dist/release/codai-macos-x86_64
+            chmod +x dist/release/codai-macos-x86_64
+          fi
+          # macOS ARM64
+          if [ -f "dist/macos-arm64/codai" ]; then
+            cp dist/macos-arm64/codai dist/release/codai-macos-arm64
+            chmod +x dist/release/codai-macos-arm64
+          fi
+          
+          # List files for debugging
+          echo "Contents of dist directory:"
+          ls -R dist/
 
       - name: Delete existing draft releases
         uses: hugo19941994/delete-draft-releases@v1.0.1
@@ -143,10 +161,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/codai-linux-x86_64
-            dist/codai-windows.exe
-            dist/codai-macos-x86_64
-            dist/codai-macos-arm64
+            dist/release/codai-linux-x86_64
+            dist/release/codai-windows.exe
+            dist/release/codai-macos-x86_64
+            dist/release/codai-macos-arm64
           #   CHANGELOG.md
           # body_path: CHANGELOG.md
         env:
