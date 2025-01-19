@@ -241,7 +241,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Support
 
 - GitHub Issues: [https://github.com/hamonikr/codai/issues](https://github.com/hamonikr/codai/issues)
-- Email: hamonikr@gmail.com
+- Email: chaeya@gmail.com
 
 ## Acknowledgments
 
