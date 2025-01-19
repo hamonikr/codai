@@ -128,12 +128,10 @@ jobs:
       - name: Rename artifacts
         run: |
           cd dist
+          chmod +x codai
           mv codai codai-linux-x86_64
           chmod +x codai-linux-x86_64
-          mv codai.exe codai-windows.exe
-          mv codai codai-macos-x86_64
           chmod +x codai-macos-x86_64
-          mv codai codai-macos-arm64
           chmod +x codai-macos-arm64
 
       - name: Delete existing draft releases
