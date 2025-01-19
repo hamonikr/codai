@@ -195,7 +195,7 @@ pub async fn execute_task(
 ) -> anyhow::Result<()> {
     println!("Task list has been generated. Starting execution of each step...\n");
     
-    // 작업 시작 시간 기록
+    // Write the start time of the task
     task_manager.start_execution();
 
     let mut context = String::new();
@@ -208,7 +208,7 @@ pub async fn execute_task(
         println!("\n{}", format!("Executing step: {}", step.description).yellow());
         
         let mut retry_count = 0;
-        let max_retries = 3;
+        let max_retries = 10;
         let mut last_error = None;
         
         while retry_count < max_retries {

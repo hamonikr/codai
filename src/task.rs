@@ -115,11 +115,11 @@ impl TaskManager {
         
         for (i, step) in steps.iter().enumerate() {
             let status_icon = match &step.status {
-                TaskStatus::NotStarted => "⭕",   // 대기 중
-                TaskStatus::InProgress => "▶️",   // 진행 중
-                TaskStatus::Completed => "✅",    // 완료
-                TaskStatus::Failed(_) => "❌",    // 실패
-                TaskStatus::Blocked(_) => "⛔",   // 차단됨
+                TaskStatus::NotStarted => "⭕",   // Waiting
+                TaskStatus::InProgress => "▶️",   // In Progress
+                TaskStatus::Completed => "✅",    // Completed
+                TaskStatus::Failed(_) => "❌",    // Failed
+                TaskStatus::Blocked(_) => "⛔",   // Blocked
             };
             
             report.push_str(&format!("{} [{}/{}] {}: {:?}\n", 

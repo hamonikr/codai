@@ -18,7 +18,7 @@ impl GeminiProvider {
         Self {
             api_key: api_key.to_string(),
             client: Client::new(),
-            context: Mutex::new(ContextWindow::new(32768)), // Gemini의 기본 컨텍스트 길이
+            context: Mutex::new(ContextWindow::new(32768)), // Default context length for Gemini
         }
     }
 
@@ -42,7 +42,7 @@ impl AIProvider for GeminiProvider {
             let estimated_tokens = self.estimate_tokens(message);
             context.add_message("user", message, estimated_tokens);
             
-            // Gemini API는 다른 형식을 사용하므로 변환이 필요
+            // Gemini API requires different format conversion
             context.get_context().into_iter().map(|msg| {
                 json!({
                     "parts": [{
@@ -69,7 +69,7 @@ impl AIProvider for GeminiProvider {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?;
 
-        // 응답도 컨텍스트에 추가
+        // Add response to context
         {
             let mut context = self.context.lock().unwrap();
             let response_tokens = self.estimate_tokens(content);

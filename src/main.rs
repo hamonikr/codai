@@ -92,7 +92,7 @@ async fn handle_code_command(
     let mut response = match code_generator::generate_code(request, config).await {
         Ok(response) => {
             sp.stop();
-            // API 호출 및 토큰 수 기록
+            // API calls and token count recording
             let model_name = model.clone().unwrap_or_else(|| config.default_model.clone().unwrap_or_else(|| "gpt-3.5-turbo".to_string()));
             *api_calls.entry(model_name.clone()).or_insert(0) += 1;
             if let (Some(input), Some(output)) = (response.input_tokens, response.output_tokens) {
@@ -136,7 +136,7 @@ async fn handle_code_command(
                 &provider,
             ).await?;
 
-            // 실행 통계 출력
+            // Print execution statistics
             let elapsed = start_time.elapsed();
             println!("\n{}\n", "===== Execution Statistics =====".cyan());
             println!("⏱️  Total Execution Time: {:.2} seconds\n", elapsed.as_secs_f64());
@@ -155,18 +155,18 @@ async fn handle_code_command(
             let mut total_cost = 0.0;
             for (model, (input, output)) in &token_counts {
                 let cost = match model.as_str() {
-                    // OpenAI 모델
+                    // OpenAI models
                     "gpt-4" => ((*input as f64 * 0.03) + (*output as f64 * 0.06)) / 1000.0,
                     "gpt-3.5-turbo" => ((*input as f64 * 0.001) + (*output as f64 * 0.002)) / 1000.0,
-                    // Anthropic 모델
+                    // Anthropic models
                     "claude-3-opus-20240229" => ((*input as f64 * 0.015) + (*output as f64 * 0.075)) / 1000.0,
                     "claude-3-sonnet-20240229" => ((*input as f64 * 0.003) + (*output as f64 * 0.015)) / 1000.0,
-                    // Google 모델
+                    // Google models
                     "gemini-pro" => ((*input as f64 + *output as f64) * 0.00025) / 1000.0,
-                    // Groq 모델
+                    // Groq models
                     "mixtral-8x7b-32768" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
                     "llama2-70b-4096" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
-                    // 기본값
+                    // Default value
                     _ => 0.0,
                 };
                 total_cost += cost;
@@ -183,7 +183,7 @@ async fn handle_code_command(
         }
     }
 
-    // 메뉴는 run 옵션이 false일 때만 표시
+    // Menu is only displayed when run option is false
     let menu_options = vec![
         "Execute code".to_string(),
         "Regenerate code".to_string(),
@@ -244,7 +244,7 @@ async fn handle_code_command(
                         std::io::stdin().read_line(&mut new_prompt)?;
                         let new_message = new_prompt.trim().to_string();
 
-                        // 빈 입력이면 이전 메뉴로 돌아갑니다
+                        // Return to previous menu on empty input
                         if new_message.is_empty() {
                             menu.display(&response);
                             break;
@@ -277,9 +277,9 @@ async fn handle_code_command(
                         };
                         
                         response = new_response;
-                        menu.reset_selection();  // 선택된 항목을 Execute code로 재설정
+                        menu.reset_selection();  // Reset selected item to Execute code
                         menu.display(&response);
-                        break;  // 새 코드가 생성된 후 loop를 종료하고 메인 메뉴로 돌아갑니다
+                        break;  // Return to main menu after new code is generated
                     }
                 }
                 3 => break,
@@ -288,7 +288,7 @@ async fn handle_code_command(
         }
     }
 
-    // 실행 통계 출력
+    // Print execution statistics
     let elapsed = start_time.elapsed();
     println!("\n{}\n", "===== Execution Statistics =====".cyan());
     println!("⏱️  Total Execution Time: {:.2} seconds\n", elapsed.as_secs_f64());
@@ -307,18 +307,18 @@ async fn handle_code_command(
     let mut total_cost = 0.0;
     for (model, (input, output)) in &token_counts {
         let cost = match model.as_str() {
-            // OpenAI 모델
+            // OpenAI models
             "gpt-4" => ((*input as f64 * 0.03) + (*output as f64 * 0.06)) / 1000.0,
             "gpt-3.5-turbo" => ((*input as f64 * 0.001) + (*output as f64 * 0.002)) / 1000.0,
-            // Anthropic 모델
+            // Anthropic models
             "claude-3-opus-20240229" => ((*input as f64 * 0.015) + (*output as f64 * 0.075)) / 1000.0,
             "claude-3-sonnet-20240229" => ((*input as f64 * 0.003) + (*output as f64 * 0.015)) / 1000.0,
-            // Google 모델
+            // Google models
             "gemini-pro" => ((*input as f64 + *output as f64) * 0.00025) / 1000.0,
-            // Groq 모델
+            // Groq models
             "mixtral-8x7b-32768" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
             "llama2-70b-4096" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
-            // 기본값
+            // Default value
             _ => 0.0,
         };
         total_cost += cost;
@@ -360,15 +360,15 @@ async fn handle_task_command(
 
     let mut task_manager = TaskManager::new();
     
-    // 작업 분석 및 단계 생성
+    // Task analysis and step generation
     let steps = task_executor::analyze_task(&request, config).await?;
     
-    // 분석된 단계들을 TaskManager에 추가
+    // Add analyzed steps to TaskManager
     for step in steps {
         task_manager.add_step(step)?;
     }
     
-    // 작업 실행
+    // Execute tasks
     task_executor::execute_task(&mut task_manager, config, &request).await?;
     
     Ok(())
@@ -443,14 +443,14 @@ async fn main() -> Result<()> {
         None => {
             let config = Config::load()?;
             
-            // 시스템 요구사항 체크
+            // Check system requirements
             if let Err(e) = config.check_system_requirements() {
                 let message = Config::get_system_requirements_message(&e);
                 println!("{}", message);
                 return Ok(());
             }
 
-            // 설정 유효성 검사
+            // Validate configuration
             if let Err(e) = config.validate() {
                 match e {
                     ConfigValidationError::MissingProvider => 
@@ -467,7 +467,7 @@ async fn main() -> Result<()> {
                 return config::setup_config();
             }
 
-            // 설정이 올바른 경우 도움말 표시
+            // Display help if configuration is valid
             display_logo(env!("CARGO_PKG_VERSION"));
             Cli::try_parse_from(&["codai", "--help"])?;
             Ok(())

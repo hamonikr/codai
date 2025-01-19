@@ -44,6 +44,33 @@ codai code "create a web scraper for news headlines" -r
 codai chat "explain async/await in Rust"
 ```
 
+## Screenshots
+
+### Initial Setup
+![Setup Screen](docs/codai-setup.png)
+
+### Usage Statistics
+![Usage Statistics](docs/codai-statistics.png)
+
+### Code Generation
+![Code Generation](docs/codai-code.png)
+
+### Code Review
+![Code Review](docs/codai-review.png)
+
+### Task Analysis
+![Task Analysis](docs/codai-task.png)
+
+### Task Execution
+![Task Execution](docs/codai-task-execution.png)
+
+### Chat
+![Chat Interface](docs/codai-chat.png)
+
+### Internationalization
+![Internationalization Support](docs/codai-i18n.png) 
+
+
 ## Requirements
 
 ### System Requirements
@@ -199,26 +226,6 @@ codai config ollama_host "http://localhost:11434"
 - macOS: `~/Library/Application Support/codai/config.toml`
 - Windows: `%APPDATA%\codai\config.toml`
 
-## Screenshots
-
-### Initial Setup
-![Setup Screen](docs/codai-setup.png)
-
-### Usage Statistics
-![Usage Statistics](docs/codai-statistics.png)
-
-### Code Generation
-![Code Generation](docs/codai-code.png)
-
-### Code Review
-![Code Review](docs/codai-review.png)
-
-### Chat
-![Chat Interface](docs/codai-chat.png)
-
-### Internationalization
-![Internationalization Support](docs/codai-i18n.png) 
-
 ## Contributing
 
 1. Fork the repository
@@ -229,7 +236,7 @@ codai config ollama_host "http://localhost:11434"
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 

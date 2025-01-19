@@ -1,58 +1,58 @@
 #!/bin/bash
 
-# 색상 정의
+# Define colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# 스크립트의 실제 위치 확인
+# Check actual script location
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# 프로젝트 루트 디렉토리 (스크립트의 상위 디렉토리)
+# Project root directory (parent of script directory)
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
-# 프로젝트 루트 디렉토리로 이동
+# Move to project root directory
 cd "$PROJECT_ROOT"
 
-echo -e "${YELLOW}프로젝트 디렉토리: ${NC}$PROJECT_ROOT"
+echo -e "${YELLOW}Project directory: ${NC}$PROJECT_ROOT"
 
-# 현재 브랜치 확인
+# Check current branch
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$CURRENT_BRANCH" != "dev" ]; then
-    echo -e "${RED}Error: dev 브랜치에서만 실행할 수 있습니다.${NC}"
-    echo -e "${YELLOW}현재 브랜치: ${NC}$CURRENT_BRANCH"
+    echo -e "${RED}Error: Can only be executed from dev branch.${NC}"
+    echo -e "${YELLOW}Current branch: ${NC}$CURRENT_BRANCH"
     exit 1
 fi
 
-# 커밋되지 않은 변경사항 확인
+# Check for uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}Error: 커밋되지 않은 변경사항이 있습니다. 먼저 모든 변경사항을 커밋해주세요.${NC}"
+    echo -e "${RED}Error: There are uncommitted changes. Please commit all changes first.${NC}"
     exit 1
 fi
 
-# master와 dev 브랜치의 차이 확인
+# Check differences between master and dev branches
 git fetch origin master dev
 MASTER_HEAD=$(git rev-parse origin/master)
 DEV_HEAD=$(git rev-parse origin/dev)
 
 if [ "$MASTER_HEAD" == "$DEV_HEAD" ]; then
-    echo -e "${RED}Error: master 브랜치와 dev 브랜치의 내용이 동일합니다.${NC}"
-    echo -e "${YELLOW}릴리즈할 새로운 변경사항이 없습니다.${NC}"
+    echo -e "${RED}Error: master branch and dev branch are identical.${NC}"
+    echo -e "${YELLOW}No new changes to release.${NC}"
     exit 1
 fi
 
-# 현재 버전 가져오기
+# Get current version
 CURRENT_VERSION=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
 
-# 버전 증가 함수
+# Version increment function
 increment_version() {
     local version=$1
     local increment_type=$2
     
-    # v 접두사 제거
+    # Remove v prefix
     version=${version#v}
     
-    # 버전을 . 으로 분리
+    # Split version by .
     IFS='.' read -ra VERSION_PARTS <<< "$version"
     
     major=${VERSION_PARTS[0]:-0}
@@ -77,82 +77,82 @@ increment_version() {
     echo "v$major.$minor.$patch"
 }
 
-# 버전 타입 확인 (기본값: patch)
+# Check version type (default: patch)
 VERSION_TYPE=${1:-patch}
 if [[ ! "$VERSION_TYPE" =~ ^(major|minor|patch)$ ]]; then
-    echo -e "${RED}Error: 버전 타입은 major, minor, patch 중 하나여야 합니다.${NC}"
+    echo -e "${RED}Error: Version type must be one of: major, minor, patch${NC}"
     exit 1
 fi
 
-# 새 버전 생성
+# Generate new version
 NEW_VERSION=$(increment_version $CURRENT_VERSION $VERSION_TYPE)
 
-# Cargo.toml 버전 업데이트
-echo -e "\n${YELLOW}Cargo.toml 버전 업데이트 중...${NC}"
-# 업데이트 전 버전 출력
-echo -e "${YELLOW}업데이트 전 Cargo.toml 버전:${NC}"
+# Update Cargo.toml version
+echo -e "\n${YELLOW}Updating Cargo.toml version...${NC}"
+# Print version before update
+echo -e "${YELLOW}Cargo.toml version before update:${NC}"
 grep "^version = " Cargo.toml
 
-# OS 확인 후 적절한 sed 명령어 사용
+# Use appropriate sed command based on OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     sed -i '' "s/^version = \".*\"/version = \"${NEW_VERSION#v}\"/" Cargo.toml
 else
-    # Linux 및 기타
+    # Linux and others
     sed -i "s/^version = \".*\"/version = \"${NEW_VERSION#v}\"/" Cargo.toml
 fi
 
-# 업데이트 후 버전 출력
-echo -e "${YELLOW}업데이트 후 Cargo.toml 버전:${NC}"
+# Print version after update
+echo -e "${YELLOW}Cargo.toml version after update:${NC}"
 grep "^version = " Cargo.toml
 
-# 변경사항 요약 표시
-echo -e "\n${YELLOW}변경사항 요약:${NC}"
+# Show changes summary
+echo -e "\n${YELLOW}Changes summary:${NC}"
 git --no-pager log --oneline origin/master..origin/dev
 
-echo -e "\n${YELLOW}현재 버전: ${NC}$CURRENT_VERSION"
-echo -e "${YELLOW}새로운 버전: ${NC}$NEW_VERSION"
-echo -e "\n${GREEN}릴리즈 프로세스를 시작합니다...${NC}"
+echo -e "\n${YELLOW}Current version: ${NC}$CURRENT_VERSION"
+echo -e "${YELLOW}New version: ${NC}$NEW_VERSION"
+echo -e "\n${GREEN}Starting release process...${NC}"
 
-# 사용자 확인
-read -p "계속 진행하시겠습니까? (y/N) " -n 1 -r
+# User confirmation
+read -p "Do you want to continue? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${RED}릴리즈가 취소되었습니다.${NC}"
+    echo -e "${RED}Release cancelled.${NC}"
     exit 1
 fi
 
-# Cargo.toml 변경사항 커밋
-echo -e "\n${YELLOW}Cargo.toml 및 Cargo.lock 업데이트${NC}"
+# Commit Cargo.toml changes
+echo -e "\n${YELLOW}Updating Cargo.toml and Cargo.lock${NC}"
 cargo build
 git add Cargo.toml Cargo.lock
 git commit -m "chore: bump version to ${NEW_VERSION}"
 
-# 릴리즈 프로세스 실행
-echo -e "\n${YELLOW}1. master 브랜치로 전환${NC}"
+# Execute release process
+echo -e "\n${YELLOW}1. Switching to master branch${NC}"
 git checkout master
 
-echo -e "\n${YELLOW}2. master 브랜치 업데이트${NC}"
+echo -e "\n${YELLOW}2. Updating master branch${NC}"
 git pull origin master
 
-echo -e "\n${YELLOW}3. dev 브랜치 머지${NC}"
+echo -e "\n${YELLOW}3. Merging dev branch${NC}"
 git merge dev
 
-echo -e "\n${YELLOW}4. 새로운 태그 생성${NC}"
+echo -e "\n${YELLOW}4. Creating new tag${NC}"
 git tag -a $NEW_VERSION -m "Release $NEW_VERSION"
 
-echo -e "\n${YELLOW}5. 변경사항 푸시${NC}"
+echo -e "\n${YELLOW}5. Pushing changes${NC}"
 git push origin master
 
-echo -e "\n${YELLOW}6. 태그 푸시${NC}"
+echo -e "\n${YELLOW}6. Pushing tag${NC}"
 git push origin $NEW_VERSION
 
-echo -e "\n${YELLOW}7. dev 브랜치로 복귀${NC}"
+echo -e "\n${YELLOW}7. Returning to dev branch${NC}"
 git checkout dev
 
-echo -e "\n${YELLOW}8. dev 브랜치에 master의 변경사항 동기화${NC}"
+echo -e "\n${YELLOW}8. Syncing master changes to dev branch${NC}"
 git merge master
 git push origin dev
 
-echo -e "\n${GREEN}✨ 릴리즈가 완료되었습니다! ($NEW_VERSION)${NC}"
-echo -e "${YELLOW}GitHub Actions가 자동으로 바이너리를 빌드하고 릴리즈를 생성합니다.${NC}" 
+echo -e "\n${GREEN}✨ Release completed! ($NEW_VERSION)${NC}"
+echo -e "${YELLOW}GitHub Actions will automatically build binaries and create the release.${NC}"

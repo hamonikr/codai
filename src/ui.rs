@@ -175,7 +175,7 @@ impl Menu {
 
 pub fn display_logo(version: &str) {
     println!("\n{}", "=".repeat(50).yellow());
-    println!("{}", format!("AI.RUN CLI v{}", version).yellow());
-    println!("{}", "Empowering Your AI Journey (https://invesume.com)".white());
+    println!("{}", format!("Codai v{}", version).yellow());
+    println!("{}", "The easiest way to bring AI to your computer".white());
     println!("{}", "=".repeat(50).yellow());
 }

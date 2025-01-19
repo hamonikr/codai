@@ -21,10 +21,10 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
     let language = request.language.as_deref().unwrap_or("python");
 
     let prompt = if let Some(result) = &request.execution_result {
-        // 코드 실행 결과 리뷰
+        // Code execution result review
         let review_prompt = get_code_review_prompt();
         format!(
-            "{}\n\n코드:\n{}\n\n실행 결과:\n{}\n\n오류:\n{}\n\n실행 성공: {}",
+            "{}\n\nCode:\n{}\n\nExecution Result:\n{}\n\nError:\n{}\n\nExecution Success: {}",
             review_prompt,
             request.message,
             result.stdout,
@@ -32,16 +32,16 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
             result.success
         )
     } else {
-        // 일반 코드 생성
+        // General code generation
         let system_prompt = get_code_generation_prompt(language);
         if let Some(ref error) = request.error_message {
             format!(
-                "{}\n이전 코드 실행 중 다음 오류가 발생했습니다:\n{}\n오류를 수정한 코드를 생성해주세요.",
+                "{}\nThe following error occurred during previous code execution:\n{}\nPlease generate code that fixes this error.",
                 system_prompt, error
             )
         } else if let Some(ref feedback) = request.feedback {
             format!(
-                "{}\n다음 피드백을 반영하여 코드를 수정해주세요:\n{}",
+                "{}\nPlease modify the code reflecting the following feedback:\n{}",
                 system_prompt, feedback
             )
         } else {
@@ -59,7 +59,7 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
 
     let provider_response = provider.generate_code(&provider_request).await?;
     
-    // 마크다운 포맷 제거 및 리뷰 처리
+    // Remove markdown format and process review
     let (code, review) = if request.execution_result.is_some() {
         (
             provider_response.code.clone(),
@@ -90,7 +90,7 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
         review,
         output: None,
         task_status: None,
-        input_tokens: provider_response.input_tokens,  // provider에서 제공한 실제 토큰 수 사용
-        output_tokens: provider_response.output_tokens, // provider에서 제공한 실제 토큰 수 사용
+        input_tokens: provider_response.input_tokens,  // Use actual token count from provider
+        output_tokens: provider_response.output_tokens, // Use actual token count from provider
     })
 } 

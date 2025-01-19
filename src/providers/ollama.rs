@@ -18,7 +18,7 @@ impl OllamaProvider {
         Self {
             host: "http://localhost:11434".to_string(),
             client: Client::new(),
-            context: Mutex::new(ContextWindow::new(4096)), // 기본 컨텍스트 길이
+            context: Mutex::new(ContextWindow::new(4096)), // Default context length
         }
     }
 
@@ -26,7 +26,7 @@ impl OllamaProvider {
         Self {
             host: host.to_string(),
             client: Client::new(),
-            context: Mutex::new(ContextWindow::new(4096)), // 기본 컨텍스트 길이
+            context: Mutex::new(ContextWindow::new(4096)), // Default context length
         }
     }
 
@@ -68,7 +68,7 @@ impl AIProvider for OllamaProvider {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?;
 
-        // 응답도 컨텍스트에 추가
+        // Add response to context
         {
             let mut context = self.context.lock().unwrap();
             let response_tokens = self.estimate_tokens(content);

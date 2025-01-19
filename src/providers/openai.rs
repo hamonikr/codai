@@ -18,7 +18,7 @@ impl OpenAIProvider {
         Self {
             api_key: api_key.to_string(),
             client: Client::new(),
-            context: Mutex::new(ContextWindow::new(4096)), // 기본값으로 시작
+            context: Mutex::new(ContextWindow::new(4096)), // Start with default value
         }
     }
 
@@ -61,7 +61,7 @@ impl AIProvider for OpenAIProvider {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?;
 
-        // 응답도 컨텍스트에 추가
+        // Add response to context
         {
             let mut context = self.context.lock().unwrap();
             let response_tokens = self.estimate_tokens(content);

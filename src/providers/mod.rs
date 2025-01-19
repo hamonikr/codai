@@ -13,7 +13,7 @@ pub struct ContextWindow {
     pub messages: Vec<Message>,
     pub total_tokens: usize,
     pub max_tokens: usize,
-    pub summary: Option<String>,  // 대화 요약
+    pub summary: Option<String>,  // Chat summary
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,13 +40,13 @@ impl ContextWindow {
             tokens,
         };
 
-        // 새 메시지를 추가했을 때 최대 토큰 수를 초과하는 경우
-        // 가장 오래된 메시지부터 제거하고 요약 생성
+        // When adding a new message exceeds the maximum token count
+        // Remove oldest messages and generate summary
         while self.total_tokens + tokens > self.max_tokens && !self.messages.is_empty() {
             let removed = self.messages.remove(0);
             self.total_tokens -= removed.tokens;
             
-            // 메시지가 제거될 때 요약 업데이트
+            // Update summary when messages are removed
             if self.messages.len() > 0 {
                 self.update_summary(&removed);
             }
@@ -76,7 +76,7 @@ impl ContextWindow {
     pub fn get_context(&self) -> Vec<serde_json::Value> {
         let mut context = Vec::new();
         
-        // 요약이 있으면 시스템 메시지로 추가
+        // Add summary as system message if exists
         if let Some(summary) = &self.summary {
             context.push(serde_json::json!({
                 "role": "system",
@@ -84,7 +84,7 @@ impl ContextWindow {
             }));
         }
 
-        // 현재 메시지들 추가
+        // Add current messages
         context.extend(self.messages.iter().map(|msg| {
             serde_json::json!({
                 "role": msg.role,
@@ -101,34 +101,34 @@ pub trait AIProvider {
     async fn chat(&self, message: &str, model: Option<String>) -> Result<String>;
     async fn generate_code(&self, request: &CodeRequest) -> Result<CodeResponse>;
     
-    // 컨텍스트 관리를 위한 메서드들
+    // Methods for context management
     fn get_max_context_length(&self, model: &str) -> usize {
         match model {
-            // OpenAI 모델들
+            // OpenAI models
             "gpt-3.5-turbo" => 4096,
             "gpt-4" => 8192,
             "gpt-4-turbo" => 128000,
             
-            // Anthropic 모델들
+            // Anthropic models
             "claude-3-opus-20240229" => 200000,
             "claude-3-sonnet-20240229" => 200000,
             "claude-3-haiku-20240307" => 200000,
             
-            // Gemini 모델들
+            // Gemini models
             "gemini-pro" => 32768,
             "gemini-1.5-pro" => 32768,
             
-            // Groq 모델들
+            // Groq models
             "mixtral-8x7b-32768" => 32768,
             "llama2-70b-4096" => 4096,
             
-            // 기본값
+            // Default value
             _ => 4096,
         }
     }
     
     fn estimate_tokens(&self, text: &str) -> usize {
-        // 간단한 토큰 수 추정 (실제로는 더 정교한 구현이 필요)
+        // Simple token count estimation (needs more sophisticated implementation in practice)
         text.split_whitespace().count() * 2
     }
 }
