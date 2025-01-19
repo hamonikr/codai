@@ -1,13 +1,13 @@
-# airun-cli
+# codai
 
-[![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)](https://github.com/chaeya/airun-cli)
-[![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)](https://github.com/chaeya/airun-cli)
-[![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)](https://github.com/chaeya/airun-cli)
-[![ARM](https://img.shields.io/badge/ARM-02569B?style=flat&logo=arm&logoColor=white)](https://github.com/chaeya/airun-cli)
+[![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)](https://github.com/hamonikr/codai)
+[![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)](https://github.com/hamonikr/codai)
+[![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)](https://github.com/hamonikr/codai)
+[![ARM](https://img.shields.io/badge/ARM-02569B?style=flat&logo=arm&logoColor=white)](https://github.com/hamonikr/codai)
 
-The easiest way to bring powerful AI capabilities to your local machine. Built with Rust for maximum performance and reliability, airun-cli lets you harness the power of various AI models directly from your terminal - no complex setup required.
+The easiest way to bring powerful AI capabilities to your local machine. Built with Rust for maximum performance and reliability, codai lets you harness the power of various AI models directly from your terminal - no complex setup required.
 
-## Why airun-cli?
+## Why codai?
 
 - **Simple to Install**: One command to install, zero configuration needed to start
 - **Multiple AI Providers**: Ready-to-use integrations with leading AI models
@@ -35,13 +35,13 @@ The easiest way to bring powerful AI capabilities to your local machine. Built w
 
 ```bash
 # Install (Linux/macOS)
-curl -sSL https://raw.githubusercontent.com/chaeya/airun-cli/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/hamonikr/codai/main/install.sh | sh
 
 # Generate and run code
-airun-cli code "create a web scraper for news headlines" -r
+codai code "create a web scraper for news headlines" -r
 
 # Get programming help
-airun-cli chat "explain async/await in Rust"
+codai chat "explain async/await in Rust"
 ```
 
 ## Requirements
@@ -71,25 +71,25 @@ For cloud-based AI providers, you'll need API keys:
 
 ### From Binary
 
-1. Download the latest release from [GitHub Releases](https://github.com/chaeya/airun-cli/releases)
+1. Download the latest release from [GitHub Releases](https://github.com/hamonikr/codai/releases)
    
    Choose the appropriate binary for your system:
    
    | Operating System | Architecture | Binary Name |
    |-----------------|--------------|-------------|
-   | Linux | x86_64 (64-bit Intel/AMD) | `airun-cli-linux-x86_64` |
-   | Linux | ARM64 (64-bit ARM, e.g., Raspberry Pi 4 64-bit OS) | `airun-cli-linux-arm64` |
-   | Linux | ARM32 (32-bit ARM, e.g., Raspberry Pi OS 32-bit) | `airun-cli-linux-arm32` |
-   | macOS | x86_64 (Intel Mac) | `airun-cli-macos-x86_64` |
-   | macOS | ARM64 (Apple Silicon M1/M2) | `airun-cli-macos-arm64` |
-   | Windows | x86_64 (64-bit) | `airun-cli-windows.exe` |
+   | Linux | x86_64 (64-bit Intel/AMD) | `codai-linux-x86_64` |
+   | Linux | ARM64 (64-bit ARM, e.g., Raspberry Pi 4 64-bit OS) | `codai-linux-arm64` |
+   | Linux | ARM32 (32-bit ARM, e.g., Raspberry Pi OS 32-bit) | `codai-linux-arm32` |
+   | macOS | x86_64 (Intel Mac) | `codai-macos-x86_64` |
+   | macOS | ARM64 (Apple Silicon M1/M2) | `codai-macos-arm64` |
+   | Windows | x86_64 (64-bit) | `codai-windows.exe` |
 
 2. Extract and install:
 
 ```bash
 # Linux/macOS
-chmod +x airun-cli-*
-sudo mv airun-cli-* /usr/local/bin/airun-cli
+chmod +x codai-*
+sudo mv codai-* /usr/local/bin/codai
 
 # Windows
 # Move the .exe file to your preferred location
@@ -100,7 +100,7 @@ sudo mv airun-cli-* /usr/local/bin/airun-cli
 The install script will automatically detect your system architecture and install the appropriate binary:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/chaeya/airun-cli/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/hamonikr/codai/main/install.sh | sh
 ```
 
 Supported architectures for automatic installation:
@@ -115,8 +115,8 @@ Supported architectures for automatic installation:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Clone and Build
-git clone https://github.com/chaeya/airun-cli.git
-cd airun-cli
+git clone https://github.com/hamonikr/codai.git
+cd codai
 cargo install --path .
 ```
 
@@ -124,13 +124,13 @@ cargo install --path .
 
 ```bash
 # If installed from binary
-sudo rm /usr/local/bin/airun-cli  # Linux/macOS
-rm -rf ~/.config/airun-cli/       # Linux
-rm -rf ~/Library/Application\ Support/airun-cli/  # macOS
-rd /s /q "%APPDATA%\airun-cli"    # Windows
+sudo rm /usr/local/bin/codai  # Linux/macOS
+rm -rf ~/.config/codai/       # Linux
+rm -rf ~/Library/Application\ Support/codai/  # macOS
+rd /s /q "%APPDATA%\codai"    # Windows
 
 # If installed from source
-cargo uninstall airun-cli
+cargo uninstall codai
 ```
 
 ## Usage
@@ -139,33 +139,33 @@ cargo uninstall airun-cli
 
 ```bash
 # Show help
-airun-cli --help
+codai --help
 
 # Generate code
-airun-cli code "create a function to calculate fibonacci numbers"
+codai code "create a function to calculate fibonacci numbers"
 
 # Generate and execute code with automatic review
-airun-cli code "write a script to check system memory usage" -r
+codai code "write a script to check system memory usage" -r
 
 # Start interactive chat
-airun-cli chat "explain big O notation"
+codai chat "explain big O notation"
 ```
 
 ### Usage Examples
 
 1. Code Generation with Python:
 ```bash
-airun-cli code "create a REST API with FastAPI" -l python
+codai code "create a REST API with FastAPI" -l python
 ```
 
 2. Code Execution with Review:
 ```bash
-airun-cli code "create a sorting algorithm" -r
+codai code "create a sorting algorithm" -r
 ```
 
 3. Interactive Chat:
 ```bash
-airun-cli chat "how to implement binary search?"
+codai chat "how to implement binary search?"
 ```
 
 ## Configuration
@@ -173,51 +173,51 @@ airun-cli chat "how to implement binary search?"
 ### Interactive Setup
 
 ```bash
-airun-cli -s
+codai -s
 ```
 
 ### Manual Configuration
 
 ```bash
 # Set API keys
-airun-cli config openai_api_key "your-key"
-airun-cli config anthropic_api_key "your-key"
-airun-cli config google_api_key "your-key"
-airun-cli config groq_api_key "your-key"
+codai config openai_api_key "your-key"
+codai config anthropic_api_key "your-key"
+codai config google_api_key "your-key"
+codai config groq_api_key "your-key"
 
 # Set default provider and model
-airun-cli config default_provider "openai"
-airun-cli config default_model "gpt-4"
+codai config default_provider "openai"
+codai config default_model "gpt-4"
 
 # Configure Ollama
-airun-cli config ollama_host "http://localhost:11434"
+codai config ollama_host "http://localhost:11434"
 ```
 
 ### Configuration File Locations
 
-- Linux: `~/.config/airun-cli/config.toml`
-- macOS: `~/Library/Application Support/airun-cli/config.toml`
-- Windows: `%APPDATA%\airun-cli\config.toml`
+- Linux: `~/.config/codai/config.toml`
+- macOS: `~/Library/Application Support/codai/config.toml`
+- Windows: `%APPDATA%\codai\config.toml`
 
 ## Screenshots
 
 ### Initial Setup
-![Setup Screen](docs/airun-cli-setup.png)
+![Setup Screen](docs/codai-setup.png)
 
 ### Usage Statistics
-![Usage Statistics](docs/airun-cli-statistics.png)
+![Usage Statistics](docs/codai-statistics.png)
 
 ### Code Generation
-![Code Generation](docs/airun-cli-code.png)
+![Code Generation](docs/codai-code.png)
 
 ### Code Review
-![Code Review](docs/airun-cli-review.png)
+![Code Review](docs/codai-review.png)
 
 ### Chat
-![Chat Interface](docs/airun-cli-chat.png)
+![Chat Interface](docs/codai-chat.png)
 
 ### Internationalization
-![Internationalization Support](docs/airun-cli-i18n.png) 
+![Internationalization Support](docs/codai-i18n.png) 
 
 ## Contributing
 
@@ -233,7 +233,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- GitHub Issues: [https://github.com/chaeya/airun-cli/issues](https://github.com/chaeya/airun-cli/issues)
+- GitHub Issues: [https://github.com/hamonikr/codai/issues](https://github.com/hamonikr/codai/issues)
 - Email: hamonikr@gmail.com
 
 ## Acknowledgments
@@ -249,9 +249,9 @@ On Windows, the interactive menu might not be displayed due to the limited termi
 
 The configuration file is stored at:
 ```cmd
-%APPDATA%\airun-cli\config.toml
+%APPDATA%\codai\config.toml
 ```
-(Usually at `C:\Users\username\AppData\Roaming\airun-cli\config.toml`)
+(Usually at `C:\Users\username\AppData\Roaming\codai\config.toml`)
 
 To modify settings manually:
 1. Open the config.toml file with Notepad or another text editor

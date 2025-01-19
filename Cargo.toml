@@ -1,12 +1,12 @@
 [package]
-name = "airun-cli"
+name = "codai"
 version = "0.2.0"
 edition = "2021"
 authors = ["HamoniKR <hamonikr@gmail.com>"]
 description = "AI-powered CLI tool for developers"
 license = "MIT"
-repository = "https://github.com/chaeya/airun-cli"
-documentation = "https://github.com/chaeya/airun-cli"
+repository = "https://github.com/hamonikr/codai"
+documentation = "https://github.com/hamonikr/codai"
 readme = "README.md"
 keywords = ["ai", "cli", "development", "code-generation", "chat"]
 categories = ["command-line-utilities", "development-tools"]
