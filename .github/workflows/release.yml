@@ -19,8 +19,12 @@ jobs:
       - name: Install ARM toolchain
         run: |
           sudo apt-get update
+          sudo dpkg --add-architecture arm64
+          sudo dpkg --add-architecture armhf
+          sudo apt-get update
           sudo apt-get install -y gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
           sudo apt-get install -y libssl-dev:arm64 libssl-dev:armhf
+          sudo apt-get install -y pkg-config
           
       - name: Build for Linux
         run: |
