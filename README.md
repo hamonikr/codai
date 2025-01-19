@@ -105,8 +105,6 @@ For cloud-based AI providers, you'll need API keys:
    | Operating System | Architecture | Binary Name |
    |-----------------|--------------|-------------|
    | Linux | x86_64 (64-bit Intel/AMD) | `codai-linux-x86_64` |
-   | Linux | ARM64 (64-bit ARM, e.g., Raspberry Pi 4 64-bit OS) | `codai-linux-arm64` |
-   | Linux | ARM32 (32-bit ARM, e.g., Raspberry Pi OS 32-bit) | `codai-linux-arm32` |
    | macOS | x86_64 (Intel Mac) | `codai-macos-x86_64` |
    | macOS | ARM64 (Apple Silicon M1/M2) | `codai-macos-arm64` |
    | Windows | x86_64 (64-bit) | `codai-windows.exe` |
