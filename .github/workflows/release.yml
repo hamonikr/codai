@@ -14,15 +14,14 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu,arm-unknown-linux-gnueabihf
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu
           
       - name: Install ARM toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu
           sudo apt-get install -y pkg-config libssl-dev
-          sudo apt-get install -y crossbuild-essential-arm64 crossbuild-essential-armhf
-          sudo apt-get install -y libssl-dev:amd64 libssl-dev:arm64 libssl-dev:armhf
+          sudo apt-get install -y crossbuild-essential-arm64
           
       - name: Build for Linux
         env:
@@ -35,7 +34,6 @@ jobs:
         run: |
           cargo build --release --target x86_64-unknown-linux-gnu
           cargo build --release --target aarch64-unknown-linux-gnu
-          cargo build --release --target arm-unknown-linux-gnueabihf
           
       - name: Upload Linux x86_64 Release Asset
         uses: actions/upload-artifact@v4
@@ -49,13 +47,6 @@ jobs:
         with:
           name: codai-linux-arm64
           path: target/aarch64-unknown-linux-gnu/release/codai
-          retention-days: 3
-
-      - name: Upload Linux ARM32 Release Asset
-        uses: actions/upload-artifact@v4
-        with:
-          name: codai-linux-arm32
-          path: target/arm-unknown-linux-gnueabihf/release/codai
           retention-days: 3
 
   build-windows:
@@ -139,12 +130,6 @@ jobs:
           name: codai-linux-arm64
           path: dist
 
-      - name: Download Linux ARM32 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: codai-linux-arm32
-          path: dist
-
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -170,8 +155,6 @@ jobs:
           chmod +x codai-linux-x86_64
           mv codai-linux-arm64 codai-linux-arm64
           chmod +x codai-linux-arm64
-          mv codai-linux-arm32 codai-linux-arm32
-          chmod +x codai-linux-arm32
           mv codai.exe codai-windows.exe
           mv codai-macos-x86_64 codai-macos-x86_64
           chmod +x codai-macos-x86_64
@@ -189,7 +172,6 @@ jobs:
           files: |
             dist/codai-linux-x86_64
             dist/codai-linux-arm64
-            dist/codai-linux-arm32
             dist/codai-windows.exe
             dist/codai-macos-x86_64
             dist/codai-macos-arm64
