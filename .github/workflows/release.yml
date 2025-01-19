@@ -90,16 +90,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate Changelog
-        uses: janheinrichmerker/action-github-changelog-generator@v2.4
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          onlyLastTag: "true"
-          stripHeaders: "true"
-          stripGeneratorNotice: "true"
-          output: CHANGELOG.md
-          user: "chaeya"
-          project: "codai"
+      # - name: Generate Changelog
+      #   uses: janheinrichmerker/action-github-changelog-generator@v2.4
+      #   with:
+      #     token: ${{ secrets.GH_TOKEN }}
+      #     onlyLastTag: "true"
+      #     stripHeaders: "true"
+      #     stripGeneratorNotice: "true"
+      #     output: CHANGELOG.md
+      #     user: "chaeya"
+      #     project: "codai"
 
       - name: Download Linux x86_64 artifact
         uses: actions/download-artifact@v4
@@ -149,8 +149,8 @@ jobs:
             dist/codai-windows.exe
             dist/codai-macos-x86_64
             dist/codai-macos-arm64
-            CHANGELOG.md
-          body_path: CHANGELOG.md
+          #   CHANGELOG.md
+          # body_path: CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
