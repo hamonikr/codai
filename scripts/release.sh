@@ -115,7 +115,7 @@ echo -e "${YELLOW}New version: ${NC}$NEW_VERSION"
 echo -e "\n${GREEN}Starting release process...${NC}"
 
 # User confirmation
-echo -e "\n${YELLOW}Please enter 'y' or 'n' (영문으로 입력해주세요):${NC}"
+echo -e "\n${YELLOW}Please enter 'y' or 'n':${NC}"
 read -p "Do you want to continue? (y/N) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
