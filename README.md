@@ -1,11 +1,37 @@
-# codai
-
+[![Release](https://img.shields.io/github/v/release/hamonikr/codai)](https://github.com/hamonikr/codai/releases)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)](https://github.com/hamonikr/codai)
 [![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)](https://github.com/hamonikr/codai)
 [![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat&logo=windows&logoColor=white)](https://github.com/hamonikr/codai)
 [![ARM](https://img.shields.io/badge/ARM-02569B?style=flat&logo=arm&logoColor=white)](https://github.com/hamonikr/codai)
 
 The easiest way to bring powerful AI capabilities to your local machine. Built with Rust for maximum performance and reliability, codai lets you harness the power of various AI models directly from your terminal - no complex setup required.
+
+## 🌟 Key Features
+
+- **🚀 Powerful AI Integration**
+  - Multiple AI providers support (OpenAI, Anthropic, Google, Groq, Ollama)
+  - Smart context handling and token optimization
+  - Real-time cost monitoring and analytics
+
+- **💻 Developer-Centric Tools**
+  - Intelligent code generation with context awareness
+  - Automated code review and analysis
+  - Direct code execution capabilities
+  - Multi-language support
+  - Built-in cost tracking for each AI provider
+
+- **⚡ Performance & Reliability**
+  - Built with Rust for maximum speed and stability
+  - Efficient memory management
+  - Optimized token usage
+  - Automatic context summarization
+
+- **🔧 Easy Setup & Use**
+  - One-command installation
+  - Zero configuration to start
+  - Intuitive CLI interface
+  - Cross-platform support
 
 ## Why codai?
 
@@ -31,17 +57,27 @@ The easiest way to bring powerful AI capabilities to your local machine. Built w
   - Automatic context summarization
   - Real-time token usage and cost monitoring
 
-## Quick Start
+## 🚀 Quick Start
 
+### One-Line Installation
 ```bash
-# Install (Linux/macOS)
-curl -sSL https://raw.githubusercontent.com/hamonikr/codai/main/install.sh | sh
+# Linux/macOS
+curl -sSL https://raw.githubusercontent.com/hamonikr/codai/main/install.sh | bash
+```
 
-# Generate and run code
+### Basic Usage
+```bash
+# Generate code with AI
 codai code "create a web scraper for news headlines" -r
 
-# Get programming help
+# Get instant programming help
 codai chat "explain async/await in Rust"
+
+# Review your code
+codai review "path/to/your/code.rs"
+
+# Execute AI-generated code
+codai run "create a simple HTTP server"
 ```
 
 ## Screenshots
@@ -70,78 +106,31 @@ codai chat "explain async/await in Rust"
 ### Internationalization
 ![Internationalization Support](docs/codai-i18n.png) 
 
-
-## Requirements
+## 🛠️ Requirements
 
 ### System Requirements
 - Operating System: Linux, macOS, or Windows
-- Python 3.7 or higher
-  - Linux: `python3` and `python3-venv` packages required
-  - macOS: Python with built-in `venv` module (via Homebrew or python.org)
-  - Windows: Python with `venv` module (from python.org)
+- Python 3.7 or higher (with venv module)
 - Internet connection (except for Ollama local models)
 
-### API Requirements
-For cloud-based AI providers, you'll need API keys:
+### API Keys
 - OpenAI API key for GPT models
 - Anthropic API key for Claude models
 - Google API key for Gemini
 - Groq API key for Mixtral
 - Ollama installation for local models
 
-### Optional Requirements
-- Git (for installation from source)
-- Rust toolchain (for building from source)
-- Windows Terminal (recommended for better experience on Windows)
-
-## Installation
+## 🔧 Installation Methods
 
 ### Using Cargo
-
-The simplest installation method:
 ```bash
 cargo install codai
 ```
 
-### From Binary
+### Using Binary Releases
+Download pre-built binaries from our [GitHub Releases](https://github.com/hamonikr/codai/releases) page.
 
-1. Download the latest release from [GitHub Releases](https://github.com/hamonikr/codai/releases)
-   
-   Choose the appropriate binary for your system:
-   
-   | Operating System | Architecture | Binary Name |
-   |-----------------|--------------|-------------|
-   | Linux | x86_64 (64-bit Intel/AMD) | `codai-linux-x86_64` |
-   | macOS | x86_64 (Intel Mac) | `codai-macos-x86_64` |
-   | macOS | ARM64 (Apple Silicon M1/M2) | `codai-macos-arm64` |
-   | Windows | x86_64 (64-bit) | `codai-windows.exe` |
-
-2. Extract and install:
-
-```bash
-# Linux/macOS
-chmod +x codai-*
-sudo mv codai-* /usr/local/bin/codai
-
-# Windows
-# Move the .exe file to your preferred location
-```
-
-### Automatic Installation (Linux/macOS)
-
-The install script will automatically detect your system architecture and install the appropriate binary:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/hamonikr/codai/main/install.sh | sh
-```
-
-Supported architectures for automatic installation:
-- x86_64 (64-bit Intel/AMD processors)
-- ARM64 (64-bit ARM processors, e.g., Apple Silicon, Raspberry Pi 4 with 64-bit OS)
-- ARM32 (32-bit ARM processors, e.g., Raspberry Pi with 32-bit OS)
-
-### From Source
-
+### Building from Source
 ```bash
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -152,86 +141,27 @@ cd codai
 cargo install --path .
 ```
 
-### Uninstallation
+## ⚙️ Configuration
 
+### Quick Setup
 ```bash
-# If installed from binary
-sudo rm /usr/local/bin/codai  # Linux/macOS
-rm -rf ~/.config/codai/       # Linux
-rm -rf ~/Library/Application\ Support/codai/  # macOS
-rd /s /q "%APPDATA%\codai"    # Windows
-
-# If installed from source
-cargo uninstall codai
-```
-
-## Usage
-
-### Basic Commands
-
-```bash
-# Show help
-codai --help
-
-# Generate code
-codai code "create a function to calculate fibonacci numbers"
-
-# Generate and execute code with automatic review
-codai code "write a script to check system memory usage" -r
-
-# Start interactive chat
-codai chat "explain big O notation"
-```
-
-### Usage Examples
-
-1. Code Generation with Python:
-```bash
-codai code "create a REST API with FastAPI" -l python
-```
-
-2. Code Execution with Review:
-```bash
-codai code "create a sorting algorithm" -r
-```
-
-3. Interactive Chat:
-```bash
-codai chat "how to implement binary search?"
-```
-
-## Configuration
-
-### Interactive Setup
-
-```bash
-codai -s
+codai -s  # Interactive setup
 ```
 
 ### Manual Configuration
-
 ```bash
 # Set API keys
 codai config openai_api_key "your-key"
 codai config anthropic_api_key "your-key"
-codai config google_api_key "your-key"
-codai config groq_api_key "your-key"
 
-# Set default provider and model
+# Set preferences
 codai config default_provider "openai"
 codai config default_model "gpt-4"
-
-# Configure Ollama
-codai config ollama_host "http://localhost:11434"
 ```
 
-### Configuration File Locations
+## 🤝 Contributing
 
-- Linux: `~/.config/codai/config.toml`
-- macOS: `~/Library/Application Support/codai/config.toml`
-- Windows: `%APPDATA%\codai\config.toml`
-
-## Contributing
+We welcome contributions! Here's how you can help:
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
@@ -239,20 +169,21 @@ codai config ollama_host "http://localhost:11434"
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
+## 📝 License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## 💬 Support & Community
 
-- GitHub Issues: [https://github.com/hamonikr/codai/issues](https://github.com/hamonikr/codai/issues)
-- Email: chaeya@gmail.com
+- 🐛 [Report Issues](https://github.com/hamonikr/codai/issues)
+- 📧 Contact: chaeya@gmail.com
+- 🌟 Star us on GitHub if you find this project helpful!
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
-- Built with [Rust](https://www.rust-lang.org/)
-- Powered by various AI models
-- Special thanks to all contributors 
+- Built with [Rust](https://www.rust-lang.org/) for performance
+- Powered by leading AI models
+- Special thanks to all contributors
 
 ## Platform-Specific Differences
 
@@ -278,3 +209,5 @@ Alternatively, you can install Windows Terminal to use the interactive menu.
 
 ### Linux/macOS
 Linux and macOS fully support interactive terminals, allowing you to use arrow keys to navigate the menu options. 
+
+## 📸 Features in Action
