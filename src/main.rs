@@ -59,7 +59,6 @@ async fn handle_code_command(
     message: Option<String>,
     language: String,
     run: bool,
-    feedback: Option<String>,
     provider: Option<String>,
     model: Option<String>,
     config: &Config,
@@ -78,7 +77,7 @@ async fn handle_code_command(
         message: current_message.clone(),
         language: Some(language.clone()),
         model: model.clone(),
-        feedback,
+        feedback: None,
         error_message: None,
         execution_result: None,
         provider: provider.clone(),
@@ -475,12 +474,11 @@ async fn main() -> Result<()> {
         Some(Commands::Chat { message, provider, model }) => {
             handle_chat_command(message, provider, model, &Config::load()?).await
         }
-        Some(Commands::Code { message, language, run, feedback, provider, model }) => {
+        Some(Commands::Code { message, language, run, provider, model }) => {
             handle_code_command(
                 message,
                 language,
                 run,
-                feedback,
                 provider,
                 model,
                 &Config::load()?,

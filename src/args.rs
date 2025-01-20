@@ -26,8 +26,6 @@ pub enum Commands {
         #[arg(short, long)]
         run: bool,
         #[arg(short, long)]
-        feedback: Option<String>,
-        #[arg(short, long)]
         provider: Option<String>,
         #[arg(short, long)]
         model: Option<String>,
