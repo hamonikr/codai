@@ -1,0 +1,57 @@
+digraph G {
+    // 다이어그램 기본 설정
+    rankdir=LR;
+    bgcolor="#1a1a1a";
+    node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11, fontcolor="white"];
+    edge [fontname="Arial", fontsize=10, color="white", fontcolor="white"];
+    
+    // 노드 스타일 정의
+    user [label="Developer\n• Command Line Interface\n• Code Editor Integration\n• Project Management", fillcolor="#2d4f3c", shape=component];
+    
+    subgraph cluster_codai_system {
+        label="CODAI System";
+        style=filled;
+        fillcolor="#2a2a2a";
+        color="#666666";
+        fontcolor="white";
+        
+        codai [label="Agentic System Core\n• Task Planning\n• Context Management\n• Tool Selection\n• Error Recovery", fillcolor="#4f3d2d", shape=doubleoctagon];
+        
+        subgraph cluster_tools {
+            label="Development Tools";
+            style=filled;
+            fillcolor="#2d2d2d";
+            fontcolor="white";
+            
+            code [label="Code Generation\n• Smart Completion\n• Refactoring\n• Documentation", fillcolor="#4f2d3d"];
+            review [label="Code Review\n• Static Analysis\n• Best Practices\n• Security Check", fillcolor="#4f2d3d"];
+            task [label="Task Execution\n• Build & Test\n• Deployment\n• Monitoring", fillcolor="#4f2d3d"];
+        }
+    }
+    
+    subgraph cluster_ai {
+        label="AI Services";
+        style=filled;
+        fillcolor="#2d2d2d";
+        fontcolor="white";
+        
+        gpt [label="OpenAI\n• GPT-4\n• GPT-3.5", fillcolor="#4f2d2d"];
+        claude [label="Anthropic\n• Claude-3", fillcolor="#4f2d2d"];
+        gemini [label="Google\n• Gemini Pro", fillcolor="#4f2d2d"];
+        mixtral [label="Groq\n• Mixtral", fillcolor="#4f2d2d"];
+    }
+    
+    // 상호작용 정의
+    user -> codai [label="Commands & Queries"];
+    codai -> user [label="Results & Responses"];
+    
+    codai -> {code, review, task} [label="Orchestrate"];
+    {code, review, task} -> codai [label="Status"];
+    
+    codai -> {gpt, claude, gemini, mixtral} [label="Optimized Prompts"];
+    {gpt, claude, gemini, mixtral} -> codai [label="AI Responses"];
+    
+    // 레이아웃 조정
+    {rank=same; gpt claude gemini mixtral}
+    {rank=same; code review task}
+} 

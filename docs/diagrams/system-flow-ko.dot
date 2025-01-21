@@ -1,0 +1,83 @@
+digraph codai_system {
+    rankdir=LR;
+    graph [fontname="NanumGothic", fontsize=12];
+    node [shape=box, style=rounded, fontname="NanumGothic", fontsize=11, margin=0.3];
+    edge [fontname="NanumGothic", fontsize=10];
+
+    subgraph cluster_user {
+        label="사용자 인터페이스";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "사용자 입력" [shape=ellipse];
+        "CLI 인터페이스" [label="CLI 인터페이스\n• 명령어 파싱\n• 입력 검증\n• 도움말 시스템"];
+    }
+
+    subgraph cluster_task {
+        label="작업 관리";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "작업 오케스트레이터" [label="작업 오케스트레이터\n• 작업 분할\n• 리소스 할당\n• 진행 상황 추적"];
+        "작업 큐" [label="작업 큐\n• 우선순위 처리\n• 작업 스케줄링\n• 상태 관리"];
+    }
+
+    subgraph cluster_ai {
+        label="AI 통합";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "프로바이더 라우터" [label="프로바이더 라우터\n• 모델 선택\n• 부하 분산\n• 비용 최적화"];
+        "컨텍스트 관리자" [label="컨텍스트 관리자\n• 토큰 관리\n• 기록 추적\n• 메모리 최적화"];
+        "AI 프로바이더" [label="AI 프로바이더\n• OpenAI\n• Anthropic\n• Google\n• Groq\n• Ollama"];
+    }
+
+    subgraph cluster_code {
+        label="코드 처리";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "코드 분석기" [label="코드 분석기\n• AST 파싱\n• 정적 분석\n• 타입 추론"];
+        "코드 생성기" [label="코드 생성기\n• 템플릿 엔진\n• 의존성 관리\n• 코드 검증"];
+        "코드 최적화기" [label="코드 최적화기\n• 성능 튜닝\n• 스타일 포맷팅\n• 모범 사례 적용"];
+    }
+
+    subgraph cluster_output {
+        label="출력 처리";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "결과 포맷터" [label="결과 포맷터\n• 구문 강조\n• 마크다운 렌더링\n• 오류 포맷팅"];
+        "출력 관리자" [label="출력 관리자\n• 스트림 처리\n• 진행 상황 표시\n• 오류 처리"];
+    }
+
+    # Flow
+    edge [color="#333333"];
+    "사용자 입력" -> "CLI 인터페이스" [label="명령어/텍스트"];
+    "CLI 인터페이스" -> "작업 오케스트레이터" [label="파싱된 요청"];
+    "작업 오케스트레이터" -> "작업 큐" [label="하위 작업"];
+    "작업 큐" -> "프로바이더 라우터" [label="실행"];
+    "프로바이더 라우터" -> "컨텍스트 관리자" [label="컨텍스트"];
+    "컨텍스트 관리자" -> "AI 프로바이더" [label="최적화된 프롬프트"];
+    "AI 프로바이더" -> "코드 분석기" [label="생성된 코드"];
+    "코드 분석기" -> "코드 생성기" [label="분석 결과"];
+    "코드 생성기" -> "코드 최적화기" [label="초기 코드"];
+    "코드 최적화기" -> "결과 포맷터" [label="최적화된 코드"];
+    "결과 포맷터" -> "출력 관리자" [label="포맷된 결과"];
+    "출력 관리자" -> "CLI 인터페이스" [label="최종 출력"];
+
+    # Feedback loops
+    edge [color="#0066cc", style=dashed];
+    "코드 최적화기" -> "작업 오케스트레이터" [label="최적화 피드백"];
+    "컨텍스트 관리자" -> "작업 오케스트레이터" [label="컨텍스트 업데이트"];
+} 

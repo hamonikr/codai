@@ -1,0 +1,50 @@
+digraph G {
+    // 다이어그램 기본 설정
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="NanumGothic", fontsize=11];
+    edge [fontname="NanumGothic", fontsize=10];
+    splines=ortho;  // 직각 엣지 사용
+    
+    // 노드 스타일 정의
+    user [label="개발자\n• 명령줄 인터페이스\n• 코드 에디터 통합\n• 프로젝트 관리", fillcolor="#A8E6CF", shape=component];
+    
+    codai [label="에이전틱 시스템 코어\n• 작업 계획\n• 컨텍스트 관리\n• 도구 선택\n• 오류 복구", fillcolor="#FFD3B6", shape=doubleoctagon];
+    
+    prompt_chain [label="프롬프트 체인 엔진\n• 컨텍스트 분석\n• 작업 분해\n• 응답 최적화", fillcolor="#FFE4B5", shape=diamond];
+    
+    // Development Tools
+    code [label="코드 생성\n• 스마트 완성\n• 리팩토링\n• 문서화", fillcolor="#FF8B94"];
+    review [label="코드 리뷰\n• 정적 분석\n• 모범 사례\n• 보안 검사", fillcolor="#FF8B94"];
+    task [label="작업 실행\n• 빌드 & 테스트\n• 배포\n• 모니터링", fillcolor="#FF8B94"];
+    
+    // AI Models
+    ai_providers [label="AI 제공자\n• OpenAI (GPT-4)\n• Anthropic (Claude-3)\n• Google (Gemini)\n• Groq (Mixtral)", fillcolor="#FFAAA5", shape=folder];
+    
+    // 상호작용 정의
+    user -> codai [xlabel="1. 명령어와\n쿼리"];
+    codai -> prompt_chain [xlabel="2. 작업\n분석"];
+    prompt_chain -> ai_providers [xlabel="3. 최적화된\n프롬프트"];
+    ai_providers -> prompt_chain [xlabel="4. AI\n응답"];
+    prompt_chain -> code [xlabel="5. 실행"];
+    prompt_chain -> task [xlabel="5. 실행"];
+    code -> prompt_chain [xlabel="6. 결과"];
+    task -> prompt_chain [xlabel="6. 결과"];
+    prompt_chain -> review [xlabel="7. 검토"];
+    review -> prompt_chain [xlabel="8. 피드백"];
+    prompt_chain -> codai [xlabel="9. 처리된\n결과"];
+    codai -> user [xlabel="10. 최종\n응답"];
+    
+    // 그룹화 및 레이아웃
+    { rank=same; user }
+    { rank=same; codai }
+    { rank=same; prompt_chain }
+    { rank=same; ai_providers }
+    { rank=same; code task }
+    { rank=same; review }
+    
+    // 레이블
+    tools_label [label="개발 도구", shape=plaintext];
+    { rank=same; tools_label code }
+    edge [style=invis];
+    tools_label -> code;
+} 

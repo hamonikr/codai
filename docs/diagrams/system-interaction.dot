@@ -1,0 +1,50 @@
+digraph G {
+    // 다이어그램 기본 설정
+    rankdir=LR;
+    node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11];
+    edge [fontname="Arial", fontsize=10];
+    splines=ortho;  // 직각 엣지 사용
+    
+    // 노드 스타일 정의
+    user [label="Developer\n• Command Line Interface\n• Code Editor Integration\n• Project Management", fillcolor="#A8E6CF", shape=component];
+    
+    codai [label="Agentic System Core\n• Task Planning\n• Context Management\n• Tool Selection\n• Error Recovery", fillcolor="#FFD3B6", shape=doubleoctagon];
+    
+    prompt_chain [label="Prompt Chain Engine\n• Context Analysis\n• Task Decomposition\n• Response Optimization", fillcolor="#FFE4B5", shape=diamond];
+    
+    // Development Tools
+    code [label="Code Generation\n• Smart Completion\n• Refactoring\n• Documentation", fillcolor="#FF8B94"];
+    review [label="Code Review\n• Static Analysis\n• Best Practices\n• Security Check", fillcolor="#FF8B94"];
+    task [label="Task Execution\n• Build & Test\n• Deployment\n• Monitoring", fillcolor="#FF8B94"];
+    
+    // AI Models
+    ai_providers [label="AI Providers\n• OpenAI (GPT-4)\n• Anthropic (Claude-3)\n• Google (Gemini)\n• Groq (Mixtral)", fillcolor="#FFAAA5", shape=folder];
+    
+    // 상호작용 정의
+    user -> codai [xlabel="1. Commands\n& Queries"];
+    codai -> prompt_chain [xlabel="2. Task\nAnalysis"];
+    prompt_chain -> ai_providers [xlabel="3. Optimized\nPrompts"];
+    ai_providers -> prompt_chain [xlabel="4. AI\nResponses"];
+    prompt_chain -> code [xlabel="5. Execute"];
+    prompt_chain -> task [xlabel="5. Execute"];
+    code -> prompt_chain [xlabel="6. Results"];
+    task -> prompt_chain [xlabel="6. Results"];
+    prompt_chain -> review [xlabel="7. Review"];
+    review -> prompt_chain [xlabel="8. Feedback"];
+    prompt_chain -> codai [xlabel="9. Processed\nResults"];
+    codai -> user [xlabel="10. Final\nResponse"];
+    
+    // 그룹화 및 레이아웃
+    { rank=same; user }
+    { rank=same; codai }
+    { rank=same; prompt_chain }
+    { rank=same; ai_providers }
+    { rank=same; code task }
+    { rank=same; review }
+    
+    // 레이블
+    tools_label [label="Development Tools", shape=plaintext];
+    { rank=same; tools_label code }
+    edge [style=invis];
+    tools_label -> code;
+} 

@@ -1,0 +1,83 @@
+digraph codai_system {
+    rankdir=LR;
+    graph [fontname="NanumGothic", fontsize=12];
+    node [shape=box, style=rounded, fontname="NanumGothic", fontsize=11, margin=0.3];
+    edge [fontname="NanumGothic", fontsize=10];
+
+    subgraph cluster_user {
+        label="User Interface";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "User Input" [shape=ellipse];
+        "CLI Interface" [label="CLI Interface\n• Command parsing\n• Input validation\n• Help system"];
+    }
+
+    subgraph cluster_task {
+        label="Task Management";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "Task Orchestrator" [label="Task Orchestrator\n• Task breakdown\n• Resource allocation\n• Progress tracking"];
+        "Task Queue" [label="Task Queue\n• Priority handling\n• Task scheduling\n• State management"];
+    }
+
+    subgraph cluster_ai {
+        label="AI Integration";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "Provider Router" [label="Provider Router\n• Model selection\n• Load balancing\n• Cost optimization"];
+        "Context Manager" [label="Context Manager\n• Token management\n• History tracking\n• Memory optimization"];
+        "AI Providers" [label="AI Providers\n• OpenAI\n• Anthropic\n• Google\n• Groq\n• Ollama"];
+    }
+
+    subgraph cluster_code {
+        label="Code Processing";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "Code Analyzer" [label="Code Analyzer\n• AST parsing\n• Static analysis\n• Type inference"];
+        "Code Generator" [label="Code Generator\n• Template engine\n• Dependency mgmt\n• Code validation"];
+        "Code Optimizer" [label="Code Optimizer\n• Performance tuning\n• Style formatting\n• Best practices"];
+    }
+
+    subgraph cluster_output {
+        label="Output Processing";
+        style=dashed;
+        color="#666666";
+        fontsize=12;
+        margin=16;
+
+        "Result Formatter" [label="Result Formatter\n• Syntax highlighting\n• Markdown rendering\n• Error formatting"];
+        "Output Manager" [label="Output Manager\n• Stream handling\n• Progress display\n• Error handling"];
+    }
+
+    # Flow
+    edge [color="#333333"];
+    "User Input" -> "CLI Interface" [label="commands/text"];
+    "CLI Interface" -> "Task Orchestrator" [label="parsed request"];
+    "Task Orchestrator" -> "Task Queue" [label="subtasks"];
+    "Task Queue" -> "Provider Router" [label="execution"];
+    "Provider Router" -> "Context Manager" [label="context"];
+    "Context Manager" -> "AI Providers" [label="optimized prompt"];
+    "AI Providers" -> "Code Analyzer" [label="generated code"];
+    "Code Analyzer" -> "Code Generator" [label="analysis results"];
+    "Code Generator" -> "Code Optimizer" [label="initial code"];
+    "Code Optimizer" -> "Result Formatter" [label="optimized code"];
+    "Result Formatter" -> "Output Manager" [label="formatted result"];
+    "Output Manager" -> "CLI Interface" [label="final output"];
+
+    # Feedback loops
+    edge [color="#0066cc", style=dashed];
+    "Code Optimizer" -> "Task Orchestrator" [label="optimization feedback"];
+    "Context Manager" -> "Task Orchestrator" [label="context updates"];
+} 
