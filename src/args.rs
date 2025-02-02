@@ -15,6 +15,7 @@ pub enum Commands {
     /// Chat with AI
     Chat {
         /// Message to send
+        #[arg(value_parser = parse_shell_string)]
         message: Option<String>,
         /// AI provider to use
         #[arg(long)]
@@ -26,6 +27,7 @@ pub enum Commands {
     /// Generate and execute code
     Code {
         /// Code generation prompt
+        #[arg(value_parser = parse_shell_string)]
         message: Option<String>,
         /// Programming language
         #[arg(short, long, default_value = "python")]
@@ -43,6 +45,7 @@ pub enum Commands {
     /// Execute complex task
     Task {
         /// Task description
+        #[arg(value_parser = parse_shell_string)]
         message: Option<String>,
         /// AI provider to use
         #[arg(long)]
@@ -76,6 +79,7 @@ pub enum HistoryCommands {
     /// Search history
     Search {
         /// Search query
+        #[arg(value_parser = parse_shell_string)]
         query: String,
         /// Number of days to search back (default: 30)
         #[arg(short, long, default_value = "30")]
@@ -83,4 +87,47 @@ pub enum HistoryCommands {
     },
     /// Clear history
     Clear,
+}
+
+fn parse_shell_string(s: &str) -> Result<String, String> {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    let mut in_quotes = false;
+    let mut escaped = false;
+
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if !escaped => {
+                escaped = true;
+                continue;
+            }
+            '"' if !escaped => {
+                in_quotes = !in_quotes;
+                continue;
+            }
+            '!' if !escaped && !in_quotes => {
+                // 히스토리 확장 문자를 일반 문자로 처리
+                result.push('!');
+            }
+            _ => {
+                if escaped {
+                    match c {
+                        'n' => result.push('\n'),
+                        't' => result.push('\t'),
+                        'r' => result.push('\r'),
+                        _ => result.push(c),
+                    }
+                    escaped = false;
+                } else {
+                    result.push(c);
+                }
+            }
+        }
+    }
+
+    if escaped {
+        result.push('\\');
+    }
+
+    Ok(result)
 } 

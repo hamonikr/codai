@@ -16,6 +16,10 @@ use crate::config::Config;
 use crate::code_generator::generate_code;
 use crate::types::{CodeRequest, ExecutionResult};
 use std::sync::Mutex;
+use crate::history::{HistoryManager, RequestHistory, TokenUsage};
+use uuid::Uuid;
+use chrono::Utc;
+use std::time::Instant;
 
 lazy_static! {
     static ref PACKAGE_MAPPINGS: HashMap<String, String> = {
@@ -466,6 +470,7 @@ pub async fn execute_code_with_retry(
     config: &Config,
     provider: Option<String>,
 ) -> Result<ExecutionResult> {
+    let start_time = Instant::now();
     let home_dir = dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("Can't find home directory."))?;
     let venv_path = home_dir.join(".codai-venv");
@@ -476,12 +481,12 @@ pub async fn execute_code_with_retry(
     };
 
     let mut executor = CodeExecutor::new(venv_path, python_path);
-
     executor.setup_venv()?;
 
     let mut retry_count = 0;
-    let max_retries = 3;  // 최대 재시도 횟수를 3회로 변경
+    let max_retries = 3;
     let mut current_code = String::new();
+    let mut response_tokens = None;
 
     while retry_count < max_retries {
         if retry_count == 0 {
@@ -498,6 +503,10 @@ pub async fn execute_code_with_retry(
 
             let response = generate_code(request, config).await?;
             current_code = response.code;
+            response_tokens = Some(TokenUsage {
+                input: response.input_tokens.unwrap_or(0),
+                output: response.output_tokens.unwrap_or(0),
+            });
             println!("\n{}", "Generated code:".cyan());
             println!("{}", current_code);
         }
@@ -505,6 +514,28 @@ pub async fn execute_code_with_retry(
         match executor.execute_code(&current_code) {
             Ok(output) => {
                 if output.success {
+                    // 히스토리 저장
+                    if let Some(true) = config.history_enabled {
+                        let mut history_manager = HistoryManager::new(
+                            config.history_max_items.unwrap_or(1000),
+                            config.history_retention_days.unwrap_or(30),
+                        )?;
+
+                        let request_history = RequestHistory {
+                            id: Uuid::new_v4().to_string(),
+                            timestamp: Utc::now(),
+                            request_type: "code".to_string(),
+                            message: message.to_string(),
+                            model: config.default_model.clone(),
+                            provider: provider.clone(),
+                            tokens: response_tokens,
+                            estimated_cost: None, // 비용 계산 로직이 필요한 경우 추가
+                            execution_time: start_time.elapsed().as_secs_f64(),
+                        };
+
+                        history_manager.add_request(request_history)?;
+                    }
+
                     if is_code_review_enabled() {
                         let review_request = CodeRequest {
                             message: message.to_string(),
