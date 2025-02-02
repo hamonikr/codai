@@ -9,6 +9,7 @@ pub mod providers;
 mod task_executor;
 mod task;
 mod types;
+mod history;
 #[cfg(test)]
 mod tests;
 
@@ -17,7 +18,7 @@ use anyhow::Result;
 use std::io::Write;
 use crate::config::{Config, ConfigValidationError};
 use crate::ui::display_logo;
-use crate::code_executor::execute_python_code;
+use crate::code_executor::execute_code_with_retry;
 use crate::code_generator::generate_code;
 use crate::types::CodeRequest;
 use crate::chat::ChatRequest;
@@ -26,6 +27,7 @@ use clap::Parser;
 use crate::ui::Menu;
 use spinners::{Spinner, Spinners};
 use crate::task_executor::TaskManager;
+use crate::history::{HistoryManager, RequestHistory};
 
 async fn handle_chat_command(
     message: Option<String>,
@@ -33,6 +35,7 @@ async fn handle_chat_command(
     model: Option<String>,
     config: &Config,
 ) -> Result<()> {
+    let start_time = std::time::Instant::now();
     println!("{}", "Starting chat with AI...".green());
     
     let input = if let Some(msg) = message {
@@ -44,14 +47,37 @@ async fn handle_chat_command(
     };
 
     let request = ChatRequest {
-        message: input,
-        model,
+        message: input.clone(),
+        model: model.clone(),
         provider: provider.as_ref().and_then(|p| chat::Provider::from_str(p)),
     };
 
     let response = chat::chat(request, config).await?;
     println!("\n{}", "AI:".cyan());
     println!("{}", response.message);
+
+    if config.history_enabled.unwrap_or(true) {
+        let mut history_manager = HistoryManager::new(
+            config.history_max_items.unwrap_or(1000),
+            config.history_retention_days.unwrap_or(30),
+        )?;
+
+        history_manager.add_request(RequestHistory {
+            id: uuid::Uuid::new_v4().to_string(),
+            timestamp: chrono::Utc::now(),
+            request_type: "chat".to_string(),
+            message: input,
+            model,
+            provider: provider.clone(),
+            tokens: response.token_usage.map(|usage| history::TokenUsage {
+                input: usage.0,
+                output: usage.1,
+            }),
+            estimated_cost: response.estimated_cost,
+            execution_time: start_time.elapsed().as_secs_f64(),
+        })?;
+    }
+
     Ok(())
 }
 
@@ -127,13 +153,7 @@ async fn handle_code_command(
             println!("{}", response.code);
             println!();
 
-            execute_python_code(
-                &response.code,
-                &current_message,
-                &language,
-                config,
-                &provider,
-            ).await?;
+            let _result = execute_code_with_retry(&current_message, &language, config, provider).await?;
 
             // Print execution statistics
             let elapsed = start_time.elapsed();
@@ -198,13 +218,7 @@ async fn handle_code_command(
             match selected {
                 0 => {
                     if language == "python" {
-                        execute_python_code(
-                            &response.code,
-                            &current_message,
-                            &language,
-                            config,
-                            &provider,
-                        ).await?;
+                        let _result = execute_code_with_retry(&current_message, &language, config, provider).await?;
 
                         display_logo(env!("CARGO_PKG_VERSION"));
                         return Ok(());
@@ -373,8 +387,14 @@ async fn handle_task_command(
     Ok(())
 }
 
-fn handle_config_command(key: String, value: Option<String>) -> Result<()> {
+async fn handle_config_command(key: String, value: Option<String>, history_command: Option<args::HistoryCommands>) -> Result<()> {
     let mut config = Config::load()?;
+
+    // 히스토리 서브커맨드가 있는 경우 처리
+    if let Some(history_cmd) = history_command {
+        return handle_history_command(history_cmd, &config).await;
+    }
+
     match (key.as_str(), value) {
         ("openai_api_key", Some(val)) => {
             config.openai_api_key = Some(val);
@@ -403,6 +423,85 @@ fn handle_config_command(key: String, value: Option<String>) -> Result<()> {
                 }
             }
         }
+        ("history_enabled", Some(val)) => {
+            match val.to_lowercase().as_str() {
+                "true" | "yes" | "1" | "on" => config.history_enabled = Some(true),
+                "false" | "no" | "0" | "off" => config.history_enabled = Some(false),
+                _ => {
+                    println!("Invalid value. Please use true/false, yes/no, 1/0, or on/off.");
+                    return Ok(());
+                }
+            }
+        }
+        ("history_max_items", Some(val)) => {
+            if let Ok(size) = val.parse::<u32>() {
+                config.history_max_items = Some(size);
+            } else {
+                println!("Invalid value. Please enter a number.");
+                return Ok(());
+            }
+        }
+        ("history_retention_days", Some(val)) => {
+            if let Ok(days) = val.parse::<u32>() {
+                config.history_retention_days = Some(days);
+            } else {
+                println!("Invalid value. Please enter a number.");
+                return Ok(());
+            }
+        }
+        ("history_stats", None) => {
+            if let Some(true) = config.history_enabled {
+                let history_manager = HistoryManager::new(
+                    config.history_max_items.unwrap_or(1000),
+                    config.history_retention_days.unwrap_or(30),
+                )?;
+                
+                if let Ok(stats) = history_manager.get_statistics() {
+                    println!("\n=== History Statistics ===");
+                    println!("Total Requests: {}", stats.total_requests);
+                    println!("Total Tokens: {} (input: {}, output: {})",
+                        stats.total_tokens.input + stats.total_tokens.output,
+                        stats.total_tokens.input,
+                        stats.total_tokens.output);
+                    println!("Total Estimated Cost: ${:.4}", stats.total_cost);
+                    println!("Most Used Model: {}", stats.most_used_model);
+                    println!("Most Used Provider: {}", stats.most_used_provider);
+                }
+            } else {
+                println!("History feature is disabled.");
+            }
+            return Ok(());
+        }
+        ("history_search", Some(query)) => {
+            if let Some(true) = config.history_enabled {
+                let history_manager = HistoryManager::new(
+                    config.history_max_items.unwrap_or(1000),
+                    config.history_retention_days.unwrap_or(30),
+                )?;
+                
+                if let Ok(results) = history_manager.search_history(&query, 30) {
+                    println!("\n=== Search Results ===");
+                    for (i, request) in results.iter().enumerate() {
+                        println!("\n{}. [{}] {}", 
+                            i + 1,
+                            request.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                            request.message);
+                        if let Some(model) = &request.model {
+                            println!("   Model: {}", model);
+                        }
+                        if let Some(tokens) = &request.tokens {
+                            println!("   Tokens: {} (in: {}, out: {})",
+                                tokens.input + tokens.output,
+                                tokens.input,
+                                tokens.output);
+                        }
+                    }
+                }
+            } else {
+                println!("History feature is disabled.");
+            }
+            return Ok(());
+        }
         (key, None) => {
             match key {
                 "openai_api_key" => println!("OpenAI API key: {}", config.openai_api_key.as_deref().unwrap_or("")),
@@ -410,6 +509,9 @@ fn handle_config_command(key: String, value: Option<String>) -> Result<()> {
                 "default_provider" => println!("Default provider: {}", config.default_provider.as_deref().unwrap_or("")),
                 "history_size" => println!("Chat history size: {}", config.history_size.unwrap_or(0)),
                 "code_review_enabled" => println!("Code review feature: {}", if config.code_review_enabled.unwrap_or(true) { "enabled" } else { "disabled" }),
+                "history_enabled" => println!("History feature: {}", if config.history_enabled.unwrap_or(true) { "enabled" } else { "disabled" }),
+                "history_max_items" => println!("Maximum history items: {}", config.history_max_items.unwrap_or(1000)),
+                "history_retention_days" => println!("History retention days: {}", config.history_retention_days.unwrap_or(30)),
                 _ => println!("Unknown configuration key: {}", key),
             }
             return Ok(());
@@ -421,6 +523,67 @@ fn handle_config_command(key: String, value: Option<String>) -> Result<()> {
     }
     config.save()?;
     println!("Configuration updated successfully.");
+    Ok(())
+}
+
+async fn handle_history_command(command: args::HistoryCommands, config: &Config) -> Result<()> {
+    let history_manager = HistoryManager::new(
+        config.history_max_items.unwrap_or(1000),
+        config.history_retention_days.unwrap_or(30),
+    )?;
+
+    match command {
+        args::HistoryCommands::Stats => {
+            let stats = history_manager.get_statistics()?;
+            println!("\n=== History Statistics ===");
+            println!("Total Requests: {}", stats.total_requests);
+            println!("Total Tokens: {} (input: {}, output: {})",
+                stats.total_tokens.input + stats.total_tokens.output,
+                stats.total_tokens.input,
+                stats.total_tokens.output);
+            println!("Total Estimated Cost: ${:.4}", stats.total_cost);
+            println!("Most Used Model: {}", stats.most_used_model);
+            println!("Most Used Provider: {}", stats.most_used_provider);
+        },
+        args::HistoryCommands::Search { query, days } => {
+            let results = history_manager.search_history(&query, days)?;
+            if results.is_empty() {
+                println!("No matching records found.");
+                return Ok(());
+            }
+
+            println!("\n=== Search Results ===");
+            for (i, request) in results.iter().enumerate() {
+                println!("\n{}. [{}] {}", 
+                    i + 1,
+                    request.timestamp.format("%Y-%m-%d %H:%M:%S"),
+                    request.message);
+                if let Some(model) = &request.model {
+                    println!("   Model: {}", model);
+                }
+                if let Some(tokens) = &request.tokens {
+                    println!("   Tokens: {} (in: {}, out: {})",
+                        tokens.input + tokens.output,
+                        tokens.input,
+                        tokens.output);
+                }
+                if let Some(cost) = request.estimated_cost {
+                    println!("   Cost: ${:.4}", cost);
+                }
+            }
+        },
+        args::HistoryCommands::Clear => {
+            println!("Are you sure you want to clear all history? (y/N)");
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if input.trim().to_lowercase() == "y" {
+                history_manager.clear()?;
+                println!("History cleared successfully.");
+            } else {
+                println!("Operation cancelled.");
+            }
+        },
+    }
     Ok(())
 }
 
@@ -487,8 +650,11 @@ async fn main() -> Result<()> {
         Some(Commands::Task { message, provider, model }) => {
             handle_task_command(message, provider, model, &Config::load()?).await
         }
-        Some(Commands::Config { key, value }) => {
-            handle_config_command(key, value)
+        Some(Commands::Config { key, value, history_command }) => {
+            handle_config_command(key, value, history_command).await
         }
+        Some(Commands::History { command }) => {
+            handle_history_command(command, &Config::load()?).await
+        },
     }
 }

@@ -35,6 +35,20 @@
   - 직관적인 CLI 인터페이스
   - 크로스 플랫폼 지원
 
+- **🤖 다양한 AI 제공자 지원 (OpenAI, Anthropic, Google, Groq, Ollama)**
+- **💻 다양한 프로그래밍 언어로 코드 생성**
+- **🔄 대화형 코드 실행 및 피드백**
+- **📝 코드 리뷰 및 제안**
+- **🎯 작업 분석 및 단계별 실행**
+- **🔍 컨텍스트 인식 응답**
+- **📊 사용량 추적 및 비용 추정**
+- **📜 고급 기능이 포함된 명령어 히스토리 관리**
+  - 상세 정보가 포함된 자동 요청 로깅
+  - 오래된 기록의 압축 아카이빙
+  - 현재 및 아카이브된 히스토리 검색
+  - 사용 통계 및 비용 추적
+  - 구성 가능한 보관 정책
+
 ## 🔬 핵심 기술
 
 - **🛠️ Rust 기반 개발**
@@ -130,6 +144,14 @@ winget install codai
 
 ## ⚙️ 설정
 
+### 설정 마법사 사용
+가장 쉬운 방법은 설정 마법사를 사용하는 것입니다:
+```bash
+codai --setup
+```
+이 명령어를 실행하면 대화형 설정 마법사가 시작되어 필요한 모든 설정을 안내해드립니다.
+
+### 수동 설정
 `~/.config/codai/config.toml` (Linux/macOS) 또는 `%APPDATA%\codai\config.toml` (Windows)에 설정 파일을 생성하세요:
 
 ```toml
@@ -149,6 +171,33 @@ context_window = 8000
 cache_dir = "~/.cache/codai"
 ```
 
+### 명령어를 통한 설정
+
+설정은 `codai config` 명령어를 통해서도 가능합니다:
+
+```bash
+# API 키 설정
+codai config openai_api_key "your-api-key"
+
+# 기본 모델 설정
+codai config default_model "gpt-4"
+
+# 기본 프로바이더 설정
+codai config default_provider "openai"
+
+# 현재 설정 확인
+codai config openai_api_key
+codai config default_model
+codai config default_provider
+```
+
+또한 각 명령어 실행 시 일회성으로 프로바이더와 모델을 지정할 수 있습니다:
+```bash
+codai chat --provider openai --model gpt-4 "질문"
+codai code --provider anthropic --model claude-3 "코드 생성 요청"
+codai task --provider google --model gemini-pro "작업 요청"
+```
+
 ## 🤝 기여하기
 
 여러분의 기여를 환영합니다! 다음과 같은 방법으로 참여하실 수 있습니다:
@@ -166,14 +215,14 @@ cache_dir = "~/.cache/codai"
 git clone https://github.com/hamonikr/codai.git
 cd codai
 
+# 릴리즈 모드로 빌드
+cargo build --release
+
 # 개발 의존성 설치
 cargo install --path .
 
 # 테스트 실행
 cargo test
-
-# 릴리즈 모드로 빌드
-cargo build --release
 ```
 
 ## 📚 기술 문서
@@ -200,4 +249,71 @@ cargo build --release
   - 주소: 서울특별시 서초구 사임당로8길 17, 201호 (06640)
 
 상용 라이선스 문의는 [연락처 페이지](https://invesume.com/contactus.html)를 방문해 주세요.
+
+### 히스토리 관리
+
+Codai는 이제 AI 상호작용을 추적하고 분석할 수 있는 포괄적인 히스토리 관리 시스템을 포함합니다:
+
+```bash
+# 히스토리 통계 보기
+codai config history_stats
+
+# 히스토리 검색
+codai config history_search "검색어"
+
+# 히스토리 설정 구성
+codai config history_enabled true/false        # 히스토리 기능 활성화/비활성화
+codai config history_max_items 1000            # 최근 항목 최대 보관 수 설정
+codai config history_retention_days 30         # 아카이브 보관 기간 설정 (일)
+```
+
+#### 히스토리 기능
+
+- **자동 로깅**: 모든 상호작용이 자동으로 기록됩니다:
+  - 타임스탬프 및 고유 ID
+  - 요청 유형 및 메시지
+  - 사용된 모델 및 제공자
+  - 토큰 사용량 및 예상 비용
+  - 실행 시간
+
+- **스마트 아카이빙**:
+  - 오래된 기록은 자동으로 압축되어 보관됨
+  - 아카이브는 `~/.config/codai/history_archives/` (Linux/macOS) 또는 `%APPDATA%\codai\history_archives\` (Windows)에 저장
+  - 아카이브된 기록의 보관 기간 설정 가능
+
+- **통계 및 분석**:
+  - 총 요청 수 및 토큰 사용량
+  - 누적 비용 추적
+  - 가장 많이 사용된 모델 및 제공자
+  - 상세 사용 패턴
+
+- **검색 기능**:
+  - 현재 및 아카이브된 히스토리 모두 검색
+  - 날짜 범위로 필터링
+  - 메시지 내용 및 요청 유형으로 검색
+  - 날짜순 정렬된 결과
+
+#### 히스토리 파일 구조
+
+히스토리는 다음 위치에 저장됩니다:
+- 현재 히스토리: `~/.config/codai/history.json`
+- 아카이브: `~/.config/codai/history_archives/*.json.gz`
+
+각 히스토리 항목은 다음 정보를 포함합니다:
+```json
+{
+    "id": "고유-uuid",
+    "timestamp": "2024-03-21T12:34:56Z",
+    "request_type": "chat|code|task",
+    "message": "사용자 요청 메시지",
+    "model": "사용된-모델-이름",
+    "provider": "ai-제공자-이름",
+    "tokens": {
+        "input": 123,
+        "output": 456
+    },
+    "estimated_cost": 0.123,
+    "execution_time": 1.23
+}
+```
 

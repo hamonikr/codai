@@ -99,9 +99,8 @@ impl CodeExecutor {
     pub fn execute_code(&mut self, code: &str) -> Result<ExecutionResult> {
         let sp = create_spinner("Preparing code execution...");
         
-        let temp_dir = dirs::cache_dir()
-            .ok_or_else(|| anyhow::anyhow!("Could not find cache directory"))?
-            .join("codai");
+        // 가상 환경 내부에 임시 디렉토리 생성
+        let temp_dir = self.venv_path.join("temp");
         fs::create_dir_all(&temp_dir)?;
 
         let file_path = temp_dir.join("temp_code.py");
@@ -109,16 +108,39 @@ impl CodeExecutor {
 
         sp.set_message("Executing code...");
         
-        let output = Command::new(&self.python_path)
-            .arg(&file_path)
-            .output()?;
+        let mut command = Command::new(&self.python_path);
+        command.arg(&file_path);
+        
+        // 가상 환경의 site-packages 경로 설정
+        let site_packages = if cfg!(windows) {
+            self.venv_path.join("Lib").join("site-packages")
+        } else {
+            let output = Command::new(&self.python_path)
+                .args(&["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"])
+                .output()?;
+            let python_version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            self.venv_path.join("lib")
+                .join(format!("python{}", python_version))
+                .join("site-packages")
+        };
+
+        // PYTHONPATH 환경 변수 설정
+        if let Some(site_packages_str) = site_packages.to_str() {
+            command.env("PYTHONPATH", site_packages_str);
+        }
+
+        let output = command.output()?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         let success = output.status.success();
 
+        // 임시 파일 및 디렉토리 정리
         if let Err(e) = fs::remove_file(&file_path) {
             eprintln!("Warning: Failed to remove temporary file: {}", e);
+        }
+        if let Err(e) = fs::remove_dir(&temp_dir) {
+            eprintln!("Warning: Failed to remove temporary directory: {}", e);
         }
 
         sp.finish_and_clear();
@@ -155,12 +177,105 @@ impl CodeExecutor {
                 .args(&["install", "--upgrade", "pip"])
                 .status()?;
 
-            sp.finish_and_clear();
             if !status.success() {
+                sp.finish_and_clear();
                 return Err(anyhow::anyhow!("Failed to upgrade pip"));
             }
-            println!("{}", "Virtual environment setup completed.".green());
+
+            // 필수 패키지 설치
+            sp.set_message("Installing required packages...");
+            let required_packages = ["setuptools", "wheel", "requests", "beautifulsoup4"];
+            for package in required_packages.iter() {
+                let status = Command::new(&pip_path)
+                    .args(&["install", package])
+                    .status()?;
+                
+                if !status.success() {
+                    sp.finish_and_clear();
+                    return Err(anyhow::anyhow!("Failed to install {}", package));
+                }
+            }
+
+            sp.finish_and_clear();
         }
+
+        // Get Python version
+        let output = Command::new(&self.python_path)
+            .args(&["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"])
+            .output()?;
+        
+        let python_version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        
+        // utils.py 파일 복사 및 업데이트 로직
+        let source_path = PathBuf::from("src/tools/utils.py");
+        let target_dir = if cfg!(windows) {
+            self.venv_path.join("Lib").join("site-packages")
+        } else {
+            self.venv_path.join("lib")
+                .join(format!("python{}", python_version))
+                .join("site-packages")
+        };
+        let target_path = target_dir.join("utils.py");
+
+        // 대상 디렉토리가 없으면 생성
+        if !target_dir.exists() {
+            fs::create_dir_all(&target_dir)?;
+        }
+
+        // 파일 복사 여부 결정
+        let should_copy = if !target_path.exists() {
+            true
+        } else {
+            // 수정 시간 비교
+            let source_modified = fs::metadata(&source_path)?.modified()?;
+            let target_modified = fs::metadata(&target_path)?.modified()?;
+            source_modified > target_modified
+        };
+
+        if should_copy {
+            if let Err(e) = fs::copy(&source_path, &target_path) {
+                eprintln!("Warning: Failed to copy utils.py: {}", e);
+            } else {
+                println!("{}", "Updated utils.py in virtual environment.".green());
+            }
+        }
+
+        // 프롬프트 파일들 업데이트 로직
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?
+            .join("codai");
+
+        if !config_dir.exists() {
+            fs::create_dir_all(&config_dir)?;
+        }
+
+        // 프롬프트 파일 업데이트 함수
+        let update_prompt = |source: &str, target: &str| -> Result<()> {
+            let source_path = PathBuf::from(format!("src/prompts/{}", source));
+            let target_path = config_dir.join(target);
+
+            let should_update = if !target_path.exists() {
+                true
+            } else {
+                let source_modified = fs::metadata(&source_path)?.modified()?;
+                let target_modified = fs::metadata(&target_path)?.modified()?;
+                source_modified > target_modified
+            };
+
+            if should_update {
+                if let Err(e) = fs::copy(&source_path, &target_path) {
+                    eprintln!("Warning: Failed to copy {}: {}", source, e);
+                } else {
+                    println!("{}", format!("Updated {} in config directory.", target).green());
+                }
+            }
+            Ok(())
+        };
+
+        // 각 프롬프트 파일 업데이트
+        update_prompt("system_prompt.txt", "system_prompt.txt")?;
+        update_prompt("code_review.txt", "code_review.txt")?;
+
         Ok(())
     }
 
@@ -345,44 +460,63 @@ impl CodeExecutor {
     }
 }
 
-pub async fn execute_python_code(
-    code: &str,
+pub async fn execute_code_with_retry(
     message: &str,
     language: &str,
     config: &Config,
-    provider: &Option<String>,
+    provider: Option<String>,
 ) -> Result<ExecutionResult> {
-    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Can't find home directory."))?;
     let venv_path = home_dir.join(".codai-venv");
     let python_path = if cfg!(windows) {
         venv_path.join("Scripts").join("python.exe")
     } else {
         venv_path.join("bin").join("python")
     };
-    
+
     let mut executor = CodeExecutor::new(venv_path, python_path);
+
     executor.setup_venv()?;
-    
+
     let mut retry_count = 0;
-    let max_retries = 10;
-    let mut current_code = code.to_string();
+    let max_retries = 3;  // 최대 재시도 횟수를 3회로 변경
+    let mut current_code = String::new();
 
     while retry_count < max_retries {
+        if retry_count == 0 {
+            let request = CodeRequest {
+                message: message.to_string(),
+                language: Some(language.to_string()),
+                model: config.default_model.clone(),
+                feedback: None,
+                error_message: None,
+                execution_result: None,
+                provider: provider.clone(),
+                task_id: None,
+            };
+
+            let response = generate_code(request, config).await?;
+            current_code = response.code;
+            println!("\n{}", "Generated code:".cyan());
+            println!("{}", current_code);
+        }
+
         match executor.execute_code(&current_code) {
             Ok(output) => {
                 if output.success {
-                    println!("\n{}", "Execution result:".cyan());
-                    println!("{}", output.stdout);
-                    
-                    // 코드 리뷰 기능이 활성화된 경우에만 리뷰 수행
-                    if config.code_review_enabled.unwrap_or(true) && is_code_review_enabled() {
+                    if is_code_review_enabled() {
                         let review_request = CodeRequest {
-                            message: current_code.clone(),
+                            message: message.to_string(),
                             language: Some(language.to_string()),
                             model: config.default_model.clone(),
                             feedback: None,
                             error_message: None,
-                            execution_result: Some(output.clone()),
+                            execution_result: Some(ExecutionResult {
+                                stdout: output.stdout.clone(),
+                                stderr: output.stderr.clone(),
+                                success: output.success,
+                            }),
                             provider: provider.clone(),
                             task_id: None,
                         };
@@ -399,26 +533,26 @@ pub async fn execute_python_code(
                     println!("\n{}", "Code execution failed:".red());
                     println!("{}", output.stderr);
                     
-                    // Check for missing packages
+                    // 누락된 패키지 확인
                     let missing_packages = executor.extract_import_errors(&output.stderr);
                     if !missing_packages.is_empty() {
                         println!("\n{}", "Installing missing packages:".yellow());
                         let mut all_packages_installed = true;
                         for package in missing_packages {
                             if let Err(e) = executor.install_package(&package) {
-                                println!("Failed to install package {}: {}", package, e);
+                                println!("Package {} installation failed: {}", package, e);
                                 all_packages_installed = false;
                                 break;
                             }
                         }
                         if all_packages_installed {
-                            // Try again with the same code after installing packages
                             continue;
                         }
                     }
                     
                     if retry_count < max_retries - 1 {
-                        println!("\n{}", format!("Regenerating code... (attempt {}/{})", retry_count + 2, max_retries).yellow());
+                        println!("\n{}", format!("Code regeneration attempt... (attempt {}/{})", retry_count + 2, max_retries).yellow());
+                        println!("Previous error: {}", output.stderr);
                         
                         let regenerate_request = CodeRequest {
                             message: message.to_string(),
@@ -443,7 +577,8 @@ pub async fn execute_python_code(
                 println!("{}", e);
                 
                 if retry_count < max_retries - 1 {
-                    println!("\n{}", format!("Regenerating code... (attempt {}/{})", retry_count + 2, max_retries).yellow());
+                    println!("\n{}", format!("Code regeneration attempt... (attempt {}/{})", retry_count + 2, max_retries).yellow());
+                    println!("Previous error: {}", e);
                     
                     let error_request = CodeRequest {
                         message: message.to_string(),
@@ -467,5 +602,5 @@ pub async fn execute_python_code(
     }
 
     println!("\n{}", "Maximum retry count reached.".red());
-    Err(anyhow::anyhow!("Failed to execute code after {} retries", max_retries))
+    Err(anyhow::anyhow!("{} attempts failed. Check the error from the last attempt.", max_retries))
 } 

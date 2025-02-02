@@ -62,6 +62,22 @@ The easiest way to bring powerful AI capabilities to your local machine. Built w
   - Smart caching system
   - Parallel processing capabilities
 
+## Features
+
+- 🤖 Multiple AI providers support (OpenAI, Anthropic, Google, Groq, Ollama)
+- 💻 Code generation with multiple programming languages
+- 🔄 Interactive code execution and feedback
+- 📝 Code review and suggestions
+- 🎯 Task analysis and step-by-step execution
+- 🔍 Context-aware responses
+- 📊 Usage tracking and cost estimation
+- 📜 Command history management with advanced features
+  - Automatic request logging with detailed information
+  - Compressed archiving of old records
+  - Search functionality across current and archived history
+  - Usage statistics and cost tracking
+  - Configurable retention policies
+
 ## Why codai?
 
 - **Simple to Install**: One command to install, zero configuration needed to start
@@ -130,6 +146,14 @@ winget install codai
 
 ## ⚙️ Configuration
 
+### Using Setup Wizard
+The easiest way to configure codai is to use the setup wizard:
+```bash
+codai --setup
+```
+This command will start an interactive setup wizard that guides you through all necessary configurations.
+
+### Manual Configuration
 Create a configuration file at `~/.config/codai/config.toml` (Linux/macOS) or `%APPDATA%\codai\config.toml` (Windows):
 
 ```toml
@@ -149,54 +173,96 @@ context_window = 8000
 cache_dir = "~/.cache/codai"
 ```
 
-## 🤝 Contributing
+### Command-line Configuration
 
-We welcome contributions! Here's how you can help:
-
-1. Fork the repository
-2. Create your feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-### Development Setup
+You can also configure settings using the `codai config` command:
 
 ```bash
-# Clone the repository
-git clone https://github.com/hamonikr/codai.git
-cd codai
+# Set API keys
+codai config openai_api_key "your-api-key"
 
-# Install development dependencies
-cargo install --path .
+# Set default model
+codai config default_model "gpt-4"
 
-# Run tests
-cargo test
+# Set default provider
+codai config default_provider "openai"
 
-# Build in release mode
-cargo build --release
+# Check current settings
+codai config openai_api_key
+codai config default_model
+codai config default_provider
 ```
 
-## 📚 Technical Documentation
+Additionally, you can specify the provider and model for one-time use with each command:
+```bash
+codai chat --provider openai --model gpt-4 "your question"
+codai code --provider anthropic --model claude-3 "code generation request"
+codai task --provider google --model gemini-pro "task request"
+```
 
-- [Technical Architecture](docs/architecture.md) - System design and component details
-- [Feature Details](docs/features.md) - In-depth explanation of each feature
-- [Core Technologies](docs/core-technologies.md) - Technical deep-dive into the core technologies
+### History Management
 
-## 📄 License
+Codai now includes a comprehensive history management system that helps you track and analyze your AI interactions:
 
-This project is available under dual licensing:
+```bash
+# View history statistics
+codai config history_stats
 
-### Community License (Apache License 2.0)
-- Free for personal use, non-commercial organizations, and open source projects
-- See [LICENSE.community](LICENSE.community) for details
+# Search through history
+codai config history_search "your search query"
 
-### Commercial License
-- Required for commercial use by companies and business organizations
-- Includes additional features, support, and customization options
-- See [LICENSE.commercial](LICENSE.commercial) for detailed terms and conditions
-- Contact Information:
-  - Email: sales@invesume.com
-  - Tel: +82-2-2039-3977
-  - Address: Suite 201, 17, Saimdang-ro 8-gil, Seocho-gu, Seoul, 06640 KOREA
+# Configure history settings
+codai config history_enabled true/false        # Enable/disable history feature
+codai config history_max_items 1000            # Set maximum number of recent items to keep
+codai config history_retention_days 30         # Set archive retention period in days
+```
 
-For commercial licensing inquiries, please visit [Contact Us](https://invesume.com/contactus.html).
+#### History Features
+
+- **Automatic Logging**: Every interaction is automatically logged with:
+  - Timestamp and unique ID
+  - Request type and message
+  - Used model and provider
+  - Token usage and estimated costs
+  - Execution time
+
+- **Smart Archiving**:
+  - Old records are automatically compressed and archived
+  - Archives are stored in `~/.config/codai/history_archives/` (Linux/macOS) or `%APPDATA%\codai\history_archives\` (Windows)
+  - Configurable retention period for archived records
+
+- **Statistics and Analysis**:
+  - Total requests and token usage
+  - Cumulative cost tracking
+  - Most used models and providers
+  - Detailed usage patterns
+
+- **Search Capabilities**:
+  - Search through both current and archived history
+  - Filter by date range
+  - Search in message content and request types
+  - Results sorted by date
+
+#### History File Structure
+
+The history is stored in the following locations:
+- Current history: `~/.config/codai/history.json`
+- Archives: `~/.config/codai/history_archives/*.json.gz`
+
+Each history entry contains:
+```json
+{
+    "id": "unique-uuid",
+    "timestamp": "2024-03-21T12:34:56Z",
+    "request_type": "chat|code|task",
+    "message": "user request message",
+    "model": "used-model-name",
+    "provider": "ai-provider-name",
+    "tokens": {
+        "input": 123,
+        "output": 456
+    },
+    "estimated_cost": 0.123,
+    "execution_time": 1.23
+}
+```

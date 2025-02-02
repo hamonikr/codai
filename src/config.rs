@@ -20,6 +20,9 @@ pub struct Config {
     pub max_context_length: Option<u32>,  // 최대 컨텍스트 길이 (토큰 수)
     pub context_window_ratio: Option<f32>, // 컨텍스트 윈도우 비율 (0.0 ~ 1.0)
     pub code_review_enabled: Option<bool>, // 코드 리뷰 기능 활성화 여부
+    pub history_enabled: Option<bool>,
+    pub history_max_items: Option<u32>,
+    pub history_retention_days: Option<u32>,
 }
 
 #[allow(dead_code)]
@@ -32,6 +35,9 @@ impl Config {
             max_context_length: Some(4000),  // 기본 최대 컨텍스트 길이
             context_window_ratio: Some(0.8),  // 기본 컨텍스트 윈도우 비율
             code_review_enabled: Some(true),  // 코드 리뷰 기능 기본 활성화
+            history_enabled: Some(true),
+            history_max_items: Some(1000),
+            history_retention_days: Some(30),
             ..Default::default()
         }
     }
