@@ -57,10 +57,6 @@ pub fn set_code_review_enabled(enabled: bool) {
     }
 }
 
-pub fn is_code_review_enabled() -> bool {
-    CODE_REVIEW_STATE.lock().map(|state| *state).unwrap_or(true)
-}
-
 fn create_spinner(msg: &'static str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
     pb.enable_steady_tick(Duration::from_millis(120));
@@ -276,6 +272,26 @@ impl CodeExecutor {
             Ok(())
         };
 
+        // tools.conf 파일 업데이트
+        let tools_source = PathBuf::from("src/tools/tools.conf");
+        let tools_target = config_dir.join("tools.conf");
+        
+        let should_update_tools = if !tools_target.exists() {
+            true
+        } else {
+            let source_modified = fs::metadata(&tools_source)?.modified()?;
+            let target_modified = fs::metadata(&tools_target)?.modified()?;
+            source_modified > target_modified
+        };
+
+        if should_update_tools {
+            if let Err(e) = fs::copy(&tools_source, &tools_target) {
+                eprintln!("Warning: Failed to copy tools.conf: {}", e);
+            } else {
+                println!("{}", "Updated tools.conf in config directory.".green());
+            }
+        }
+
         // 각 프롬프트 파일 업데이트
         update_prompt("system_prompt.txt", "system_prompt.txt")?;
         update_prompt("code_review.txt", "code_review.txt")?;
@@ -469,6 +485,7 @@ pub async fn execute_code_with_retry(
     language: &str,
     config: &Config,
     provider: Option<String>,
+    initial_code: Option<String>,
 ) -> Result<ExecutionResult> {
     let start_time = Instant::now();
     let home_dir = dirs::home_dir()
@@ -485,32 +502,36 @@ pub async fn execute_code_with_retry(
 
     let mut retry_count = 0;
     let max_retries = 3;
-    let mut current_code = String::new();
+    let mut current_code: String;
     let mut response_tokens = None;
 
+    // 초기 코드 사용 또는 생성
+    if let Some(code) = initial_code {
+        current_code = code;
+    } else {
+        let request = CodeRequest {
+            message: message.to_string(),
+            language: Some(language.to_string()),
+            model: config.default_model.clone(),
+            feedback: None,
+            error_message: None,
+            execution_result: None,
+            provider: provider.clone(),
+            task_id: None,
+        };
+
+        let response = generate_code(request, config).await?;
+        current_code = response.code.clone();
+        response_tokens = Some(TokenUsage {
+            input: response.input_tokens.unwrap_or(0),
+            output: response.output_tokens.unwrap_or(0),
+        });
+        
+        println!("\n{}", "Generated code:".cyan());
+        println!("{}", current_code);
+    }
+
     while retry_count < max_retries {
-        if retry_count == 0 {
-            let request = CodeRequest {
-                message: message.to_string(),
-                language: Some(language.to_string()),
-                model: config.default_model.clone(),
-                feedback: None,
-                error_message: None,
-                execution_result: None,
-                provider: provider.clone(),
-                task_id: None,
-            };
-
-            let response = generate_code(request, config).await?;
-            current_code = response.code;
-            response_tokens = Some(TokenUsage {
-                input: response.input_tokens.unwrap_or(0),
-                output: response.output_tokens.unwrap_or(0),
-            });
-            println!("\n{}", "Generated code:".cyan());
-            println!("{}", current_code);
-        }
-
         match executor.execute_code(&current_code) {
             Ok(output) => {
                 if output.success {
@@ -529,41 +550,15 @@ pub async fn execute_code_with_retry(
                             model: config.default_model.clone(),
                             provider: provider.clone(),
                             tokens: response_tokens,
-                            estimated_cost: None, // 비용 계산 로직이 필요한 경우 추가
+                            estimated_cost: None,
                             execution_time: start_time.elapsed().as_secs_f64(),
                         };
 
                         history_manager.add_request(request_history)?;
                     }
 
-                    if is_code_review_enabled() {
-                        let review_request = CodeRequest {
-                            message: message.to_string(),
-                            language: Some(language.to_string()),
-                            model: config.default_model.clone(),
-                            feedback: None,
-                            error_message: None,
-                            execution_result: Some(ExecutionResult {
-                                stdout: output.stdout.clone(),
-                                stderr: output.stderr.clone(),
-                                success: output.success,
-                            }),
-                            provider: provider.clone(),
-                            task_id: None,
-                        };
-
-                        if let Ok(review_response) = generate_code(review_request, config).await {
-                            if let Some(review) = review_response.review {
-                                println!("\n{}", "Code review:".cyan());
-                                println!("{}", review);
-                            }
-                        }
-                    }
                     return Ok(output);
                 } else {
-                    println!("\n{}", "Code execution failed:".red());
-                    println!("{}", output.stderr);
-                    
                     // 누락된 패키지 확인
                     let missing_packages = executor.extract_import_errors(&output.stderr);
                     if !missing_packages.is_empty() {
@@ -571,19 +566,18 @@ pub async fn execute_code_with_retry(
                         let mut all_packages_installed = true;
                         for package in missing_packages {
                             if let Err(e) = executor.install_package(&package) {
-                                println!("Package {} installation failed: {}", package, e);
+                                println!("Failed to install package {}: {}", package, e);
                                 all_packages_installed = false;
                                 break;
                             }
                         }
                         if all_packages_installed {
-                            continue;
+                            continue;  // 패키지 설치 후 같은 코드로 재시도
                         }
                     }
                     
                     if retry_count < max_retries - 1 {
-                        println!("\n{}", format!("Code regeneration attempt... (attempt {}/{})", retry_count + 2, max_retries).yellow());
-                        println!("Previous error: {}", output.stderr);
+                        println!("\n{}", format!("Regenerating code... (attempt {}/{})", retry_count + 2, max_retries).yellow());
                         
                         let regenerate_request = CodeRequest {
                             message: message.to_string(),
@@ -597,7 +591,7 @@ pub async fn execute_code_with_retry(
                         };
 
                         let new_response = generate_code(regenerate_request, config).await?;
-                        current_code = new_response.code;
+                        current_code = new_response.code.clone();
                         println!("\n{}", "Newly generated code:".cyan());
                         println!("{}", current_code);
                     }
@@ -608,8 +602,7 @@ pub async fn execute_code_with_retry(
                 println!("{}", e);
                 
                 if retry_count < max_retries - 1 {
-                    println!("\n{}", format!("Code regeneration attempt... (attempt {}/{})", retry_count + 2, max_retries).yellow());
-                    println!("Previous error: {}", e);
+                    println!("\n{}", format!("Regenerating code... (attempt {}/{})", retry_count + 2, max_retries).yellow());
                     
                     let error_request = CodeRequest {
                         message: message.to_string(),
@@ -623,7 +616,7 @@ pub async fn execute_code_with_retry(
                     };
 
                     let new_response = generate_code(error_request, config).await?;
-                    current_code = new_response.code;
+                    current_code = new_response.code.clone();
                     println!("\n{}", "Newly generated code:".cyan());
                     println!("{}", current_code);
                 }
@@ -633,5 +626,5 @@ pub async fn execute_code_with_retry(
     }
 
     println!("\n{}", "Maximum retry count reached.".red());
-    Err(anyhow::anyhow!("{} attempts failed. Check the error from the last attempt.", max_retries))
+    Err(anyhow::anyhow!("Failed to execute code after {} retries", max_retries))
 } 

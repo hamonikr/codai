@@ -20,7 +20,7 @@ use crate::config::{Config, ConfigValidationError};
 use crate::ui::display_logo;
 use crate::code_executor::execute_code_with_retry;
 use crate::code_generator::generate_code;
-use crate::types::CodeRequest;
+use crate::types::{CodeRequest, ExecutionResult};
 use crate::chat::ChatRequest;
 use crate::args::{Cli, Commands};
 use clap::Parser;
@@ -153,47 +153,109 @@ async fn handle_code_command(
             println!("{}", response.code);
             println!();
 
-            let _result = execute_code_with_retry(&current_message, &language, config, provider).await?;
+            let result = execute_code_with_retry(
+                &current_message,
+                &language,
+                config,
+                provider.clone(),
+                Some(response.code.clone())
+            ).await?;
 
-            // Print execution statistics
-            let elapsed = start_time.elapsed();
-            println!("\n{}\n", "===== Execution Statistics =====".cyan());
-            println!("⏱️  Total Execution Time: {:.2} seconds\n", elapsed.as_secs_f64());
-
-            println!("🤖 API Calls and Token Usage:");
-            for (model, count) in &api_calls {
-                if let Some((input, output)) = token_counts.get(model) {
-                    println!("  • {}: {} calls ({} input tokens, {} output tokens)", 
-                        model, count, input, output);
-                } else {
-                    println!("  • {}: {} calls", model, count);
+            // 실행 결과 출력
+            if result.success {
+                if !result.stdout.trim().is_empty() {
+                    println!("\n{}", "Execution output:".cyan());
+                    println!("{}", result.stdout);
                 }
-            }
+                if !result.stderr.trim().is_empty() {
+                    println!("\n{}", "Execution warnings:".yellow());
+                    println!("{}", result.stderr);
+                }
+                println!("\n{}", "✓ Code executed successfully".green());
 
-            println!("\n💰 Estimated Costs:");
-            let mut total_cost = 0.0;
-            for (model, (input, output)) in &token_counts {
-                let cost = match model.as_str() {
-                    // OpenAI models
-                    "gpt-4" => ((*input as f64 * 0.03) + (*output as f64 * 0.06)) / 1000.0,
-                    "gpt-3.5-turbo" => ((*input as f64 * 0.001) + (*output as f64 * 0.002)) / 1000.0,
-                    // Anthropic models
-                    "claude-3-opus-20240229" => ((*input as f64 * 0.015) + (*output as f64 * 0.075)) / 1000.0,
-                    "claude-3-sonnet-20240229" => ((*input as f64 * 0.003) + (*output as f64 * 0.015)) / 1000.0,
-                    // Google models
-                    "gemini-pro" => ((*input as f64 + *output as f64) * 0.00025) / 1000.0,
-                    // Groq models
-                    "mixtral-8x7b-32768" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
-                    "llama2-70b-4096" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
-                    // Default value
-                    _ => 0.0,
-                };
-                total_cost += cost;
-                println!("  • {}: ${:.4} ({:.1}K tokens)", 
-                    model, cost, (*input + *output) as f64 / 1000.0);
-            }
+                // 실행이 성공한 경우에만 리뷰 수행
+                if config.code_review_enabled.unwrap_or(true) {
+                    let review_request = CodeRequest {
+                        message: response.code.clone(),
+                        language: Some(language.clone()),
+                        model: model.clone(),
+                        feedback: None,
+                        error_message: None,
+                        execution_result: Some(ExecutionResult {
+                            stdout: result.stdout,
+                            stderr: result.stderr,
+                            success: true
+                        }),
+                        provider,
+                        task_id: None,
+                    };
 
-            println!("\n💵 Total Estimated Cost: ${:.4}", total_cost);
+                    if let Ok(review_response) = code_generator::generate_code(review_request, config).await {
+                        if let Some(review) = review_response.review {
+                            println!("\n{}", "Code Review:".cyan());
+                            println!("{}", review);
+                            
+                            // API 호출 및 토큰 카운트 기록 업데이트
+                            let model_name = model.clone().unwrap_or_else(|| config.default_model.clone().unwrap_or_else(|| "gpt-3.5-turbo".to_string()));
+                            *api_calls.entry(model_name.clone()).or_insert(0) += 1;
+                            if let (Some(input), Some(output)) = (review_response.input_tokens, review_response.output_tokens) {
+                                if let Some((prev_input, prev_output)) = token_counts.get_mut(&model_name) {
+                                    *prev_input += input;
+                                    *prev_output += output;
+                                } else {
+                                    token_counts.insert(model_name, (input, output));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Print execution statistics
+                let elapsed = start_time.elapsed();
+                println!("\n{}\n", "===== Execution Statistics =====".cyan());
+                println!("⏱️  Total Execution Time: {:.2} seconds\n", elapsed.as_secs_f64());
+
+                println!("🤖 API Calls and Token Usage:");
+                for (model, count) in &api_calls {
+                    if let Some((input, output)) = token_counts.get(model) {
+                        println!("  • {}: {} calls ({} input tokens, {} output tokens)", 
+                            model, count, input, output);
+                    } else {
+                        println!("  • {}: {} calls", model, count);
+                    }
+                }
+
+                println!("\n💰 Estimated Costs:");
+                let mut total_cost = 0.0;
+                for (model, (input, output)) in &token_counts {
+                    let cost = match model.as_str() {
+                        // OpenAI models
+                        "gpt-4" => ((*input as f64 * 0.03) + (*output as f64 * 0.06)) / 1000.0,
+                        "gpt-3.5-turbo" => ((*input as f64 * 0.001) + (*output as f64 * 0.002)) / 1000.0,
+                        // Anthropic models
+                        "claude-3-opus-20240229" => ((*input as f64 * 0.015) + (*output as f64 * 0.075)) / 1000.0,
+                        "claude-3-sonnet-20240229" => ((*input as f64 * 0.003) + (*output as f64 * 0.015)) / 1000.0,
+                        // Google models
+                        "gemini-pro" => ((*input as f64 + *output as f64) * 0.00025) / 1000.0,
+                        // Groq models
+                        "mixtral-8x7b-32768" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
+                        "llama2-70b-4096" => ((*input as f64 + *output as f64) * 0.0007) / 1000.0,
+                        // Default value
+                        _ => 0.0,
+                    };
+                    total_cost += cost;
+                    println!("  • {}: ${:.4} ({:.1}K tokens)", 
+                        model, cost, (*input + *output) as f64 / 1000.0);
+                }
+
+                println!("\n💵 Total Estimated Cost: ${:.4}", total_cost);
+
+                display_logo(env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            } else {
+                println!("\n{}", "Code execution failed:".red());
+                println!("{}", result.stderr);
+            }
 
             display_logo(env!("CARGO_PKG_VERSION"));
             return Ok(());
@@ -218,7 +280,29 @@ async fn handle_code_command(
             match selected {
                 0 => {
                     if language == "python" {
-                        let _result = execute_code_with_retry(&current_message, &language, config, provider).await?;
+                        let result = execute_code_with_retry(
+                            &current_message,
+                            &language,
+                            config,
+                            provider,
+                            Some(response.code.clone())
+                        ).await?;
+
+                        // 실행 결과 출력
+                        if result.success {
+                            if !result.stdout.trim().is_empty() {
+                                println!("\n{}", "Execution output:".cyan());
+                                println!("{}", result.stdout);
+                            }
+                            if !result.stderr.trim().is_empty() {
+                                println!("\n{}", "Execution warnings:".yellow());
+                                println!("{}", result.stderr);
+                            }
+                            println!("\n{}", "✓ Code executed successfully".green());
+                        } else {
+                            println!("\n{}", "Code execution failed:".red());
+                            println!("{}", result.stderr);
+                        }
 
                         display_logo(env!("CARGO_PKG_VERSION"));
                         return Ok(());
@@ -341,6 +425,7 @@ async fn handle_code_command(
 
     println!("\n💵 Total Estimated Cost: ${:.4}", total_cost);
 
+    display_logo(env!("CARGO_PKG_VERSION"));
     Ok(())
 }
 

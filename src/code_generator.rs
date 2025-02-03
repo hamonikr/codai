@@ -62,8 +62,8 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
     // Remove markdown format and process review
     let (code, review) = if request.execution_result.is_some() {
         (
-            provider_response.code.clone(),
-            Some(provider_response.code)
+            request.message.clone(),      // 원본 코드 유지
+            Some(provider_response.code)  // AI가 생성한 리뷰
         )
     } else {
         let extracted_code = provider_response.code
@@ -79,18 +79,18 @@ pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<Code
             } else { 
                 extracted_code 
             },
-            None
+            None  // 코드 생성 시에는 리뷰 없음
         )
     };
 
     Ok(CodeResponse {
-        code,
+        code: if request.execution_result.is_some() { request.message } else { code },  // 리뷰 시에는 원본 코드 유지
         explanation: provider_response.explanation,
         packages: Some(provider_response.packages),
         review,
         output: None,
         task_status: None,
-        input_tokens: provider_response.input_tokens,  // Use actual token count from provider
-        output_tokens: provider_response.output_tokens, // Use actual token count from provider
+        input_tokens: provider_response.input_tokens,
+        output_tokens: provider_response.output_tokens,
     })
 } 

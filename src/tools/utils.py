@@ -52,38 +52,129 @@ import random
 import urllib.parse
 import re
 
-def load_config() -> dict:
-    """
-    ~/.airun/airun.conf 파일에서 설정을 읽어옵니다.
-    
-    Returns:
-        dict: 설정값들을 담은 딕셔너리
-    """
-    config = {}
-    config_path = os.path.expanduser("~/.airun/airun.conf")
-    
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line and line.startswith('export '):
-                    # 'export KEY="VALUE"' 형식 파싱
-                    line = line.replace('export ', '')
-                    key, value = line.split('=', 1)
-                    key = key.strip()
-                    value = value.strip().strip('"').strip("'")
-                    config[key] = value
-    except Exception as e:
-        print(f"[WARNING] 설정 파일 로드 실패: {str(e)}")
-        
-    return config
+class Config:
+    """설정 관리를 위한 클래스"""
+    _instance = None
+    _config = None
 
-# 설정 파일에서 SMTP 설정 로드
-config = load_config()
-SMTP_HOST = config.get("SMTP_HOST", "smtp.worksmobile.com")  # 기본값 설정
-SMTP_PORT = int(config.get("SMTP_PORT", "587"))  # 기본값 설정
-SMTP_USERNAME = config.get("SMTP_USERNAME", "")
-SMTP_PASSWORD = config.get("SMTP_PASSWORD", "")
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        if self._config is None:
+            self._config = self._load_config()
+
+    def reload(self):
+        """설정을 다시 로드합니다."""
+        self._config = self._load_config()
+        return self._config
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """설정값을 가져옵니다."""
+        return self._config.get(key, default)
+
+    def get_smtp_settings(self) -> dict:
+        """SMTP 설정을 딕셔너리로 반환합니다."""
+        return {
+            'host': self.get('SMTP_HOST', 'smtp.gmail.com'),
+            'port': int(self.get('SMTP_PORT', '587')),
+            'username': self.get('SMTP_USERNAME', ''),
+            'password': self.get('SMTP_PASSWORD', ''),
+            'secure': self.get('SMTP_SECURE', 'YES').upper() not in ['NO', 'N']
+        }
+
+    @staticmethod
+    def _load_config() -> dict:
+        """
+        ~/.config/codai/tools.conf 파일에서 설정을 읽어옵니다.
+        파일이 없는 경우 기본 설정으로 생성합니다.
+        
+        Returns:
+            dict: 설정값들을 담은 딕셔너리
+        """
+        config = {}
+        config_dir = os.path.expanduser("~/.config/codai")
+        config_path = os.path.join(config_dir, "tools.conf")
+        
+        # 기본 SMTP 설정
+        default_config = {
+            'SMTP_HOST': 'smtp.gmail.com',
+            'SMTP_PORT': '587',
+            'SMTP_USERNAME': '',
+            'SMTP_PASSWORD': '',
+            'SMTP_SECURE': 'YES'
+        }
+        
+        # 설정 디렉토리가 없으면 생성
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        
+        # 설정 파일이 없으면 기본 설정으로 생성
+        if not os.path.exists(config_path):
+            with open(config_path, 'w', encoding='utf-8') as f:
+                f.write("""# Codai Tools 설정 파일
+# 이 파일은 자동으로 생성되었습니다.
+# 각 설정값을 필요에 맞게 수정해주세요.
+
+# =============================================================================
+# SMTP 이메일 설정
+# =============================================================================
+# Gmail을 사용하는 경우:
+# - SMTP_HOST는 'smtp.gmail.com' 사용
+# - SMTP_PORT는 587 (TLS) 또는 465 (SSL) 사용
+# - SMTP_USERNAME에 Gmail 주소 입력
+# - SMTP_PASSWORD에 앱 비밀번호 입력 (Gmail 계정 설정에서 생성 필요)
+# - SMTP_SECURE는 TLS 사용시 YES, 미사용시 NO
+
+# Naver 메일을 사용하는 경우:
+# SMTP_HOST=smtp.naver.com
+# SMTP_PORT=587
+
+# 다음 메일을 사용하는 경우:
+# SMTP_HOST=smtp.daum.net
+# SMTP_PORT=465
+
+# 현재 설정값:
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_SECURE=YES
+""")
+            print(f"[INFO] 기본 설정 파일이 생성되었습니다: {config_path}")
+            print("[INFO] SMTP 설정을 완료하려면 파일을 직접 수정해주세요.")
+        
+        # 설정 파일 읽기
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):  # 주석 무시
+                        try:
+                            key, value = line.split('=', 1)
+                            key = key.strip()
+                            value = value.strip().strip('"').strip("'")
+                            config[key] = value
+                        except ValueError:
+                            continue  # 잘못된 형식의 라인은 무시
+        except Exception as e:
+            print(f"[ERROR] 설정 파일 읽기 실패: {str(e)}")
+            return default_config
+        
+        # 필수 SMTP 설정이 없는 경우 기본값으로 설정
+        for key, value in default_config.items():
+            if key not in config:
+                config[key] = value
+        
+        return config
+
+# 전역 설정 객체 생성
+config = Config()
+
+# 기존 전역 변수 제거
+# SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD 변수는 더 이상 사용하지 않음
 
 def install_if_missing(package: str, import_name: str = None) -> None:
     """Install a package if it's not already installed
@@ -1623,23 +1714,35 @@ def write_file(path: str, content: Union[str, pd.DataFrame, bytes], mode: str = 
         
         # HWPX 파일 처리
         if file_ext == '.hwpx':
-            if isinstance(content, HWPDocument):
-                return content.save(raw_path)
-                
             doc = HWPDocument()
+            # 파일명을 제목으로 사용
+            title = os.path.splitext(os.path.basename(raw_path))[0]
+            # doc.add_heading("title")
+            doc.add_heading("")
             
-            # 내용 추가
             if isinstance(content, str):
-                doc.add_paragraph(content)
+                doc.add_text_content(content)
             elif isinstance(content, pd.DataFrame):
-                doc.add_table(content)
-            elif isinstance(content, list):
-                for item in content:
-                    doc.add_paragraph(str(item))
+                doc.add_table(data=content.values.tolist(), header=content.columns.tolist())
+            else:
+                raise ValueError("HWPX 파일 생성을 위해서는 문자열이나 DataFrame 형식의 데이터가 필요합니다.")
+            doc.save(raw_path)
+            return
+
+        # PDF 파일 처리
+        if file_ext == '.pdf':
+            doc = PDFDocument()
+            if isinstance(content, str):
+                doc.add_content(content)
+            elif isinstance(content, pd.DataFrame):
+                # DataFrame을 텍스트 테이블 형식으로 변환
+                table_str = content.to_string()
+                doc.add_content(table_str)
+            else:
+                raise ValueError("PDF 파일 생성을 위해서는 문자열이나 DataFrame 형식의 데이터가 필요합니다.")
+            doc.save(raw_path)
+            return
             
-            # 문서 저장
-            return doc.save(raw_path)
-        
         # DataFrame to text for .txt files
         if isinstance(content, pd.DataFrame) and file_ext == '.txt':
             content = content.to_string()
@@ -3600,19 +3703,18 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
         from email.utils import formatdate
         import os
         
-        # SMTP_SECURE 설정 가져오기
-        config = load_config()
-        secure = config.get("SMTP_SECURE", "YES").upper() not in ["NO", "N"]
+        # SMTP 설정 가져오기
+        smtp_config = config.get_smtp_settings()
         
         print(f"\n[INFO] SMTP Settings:")
-        print(f"- Server: {SMTP_HOST}")
-        print(f"- Port: {SMTP_PORT}")
-        print(f"- Account: {SMTP_USERNAME}")
-        print(f"- Secure: {secure}")
+        print(f"- Server: {smtp_config['host']}")
+        print(f"- Port: {smtp_config['port']}")
+        print(f"- Account: {smtp_config['username']}")
+        print(f"- Secure: {smtp_config['secure']}")
         
         # 메시지 생성
         msg = MIMEMultipart('alternative')
-        msg['From'] = SMTP_USERNAME
+        msg['From'] = smtp_config['username']
         msg['To'] = to_email
         msg['Subject'] = subject
         msg['Date'] = formatdate(localtime=True)
@@ -3640,10 +3742,10 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
                     continue
         
         # SMTP 서버 연결 및 이메일 발송
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            if secure:
-                server.starttls()  # TLS 보안 연결 (SMTP_SECURE가 true인 경우에만)
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as server:
+            if smtp_config['secure']:
+                server.starttls()  # TLS 보안 연결
+            server.login(smtp_config['username'], smtp_config['password'])
             server.send_message(msg)
             
         print(f"[INFO] 이메일이 성공적으로 발송되었습니다: {to_email}")
