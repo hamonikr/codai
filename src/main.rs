@@ -97,7 +97,12 @@ async fn handle_code_command(
         buffer.trim().to_string()
     };
 
-    let mut sp = Spinner::new(Spinners::Dots9, "Generating code...".cyan().to_string());
+    let spinner_text = if cfg!(windows) {
+        "Generating code..."
+    } else {
+        "Generating code...".cyan().to_string()
+    };
+    let mut sp = Spinner::new(Spinners::Dots9, spinner_text);
 
     let request = CodeRequest {
         message: current_message.clone(),
@@ -127,19 +132,37 @@ async fn handle_code_command(
         }
         Err(e) => {
             sp.stop();
-            println!("\n{} {}", "✗".red(), "Code generation failed".red());
-            match e.to_string() {
-                s if s.contains("API key") => {
-                    println!("\n{}", "Error: Invalid or missing API key. Please check your configuration.".red());
+            if cfg!(windows) {
+                println!("\nX Code generation failed");
+                match e.to_string() {
+                    s if s.contains("API key") => {
+                        println!("\nError: Invalid or missing API key. Please check your configuration.");
+                    }
+                    s if s.contains("rate limit") => {
+                        println!("\nError: Rate limit exceeded. Please try again later.");
+                    }
+                    s if s.contains("timeout") => {
+                        println!("\nError: Request timed out. Please check your internet connection.");
+                    }
+                    _ => {
+                        println!("\nError generating code: {}", e);
+                    }
                 }
-                s if s.contains("rate limit") => {
-                    println!("\n{}", "Error: Rate limit exceeded. Please try again later.".red());
-                }
-                s if s.contains("timeout") => {
-                    println!("\n{}", "Error: Request timed out. Please check your internet connection.".red());
-                }
-                _ => {
-                    println!("\n{}", format!("Error generating code: {}", e).red());
+            } else {
+                println!("\n{} {}", "✗".red(), "Code generation failed".red());
+                match e.to_string() {
+                    s if s.contains("API key") => {
+                        println!("\n{}", "Error: Invalid or missing API key. Please check your configuration.".red());
+                    }
+                    s if s.contains("rate limit") => {
+                        println!("\n{}", "Error: Rate limit exceeded. Please try again later.".red());
+                    }
+                    s if s.contains("timeout") => {
+                        println!("\n{}", "Error: Request timed out. Please check your internet connection.".red());
+                    }
+                    _ => {
+                        println!("\n{}", format!("Error generating code: {}", e).red());
+                    }
                 }
             }
             return Ok(());
@@ -347,7 +370,12 @@ async fn handle_code_command(
                             break;
                         }
 
-                        let mut sp = Spinner::new(Spinners::Dots9, "Generating code...".cyan().to_string());
+                        let spinner_text = if cfg!(windows) {
+                            "Generating code..."
+                        } else {
+                            "Generating code...".cyan().to_string()
+                        };
+                        let mut sp = Spinner::new(Spinners::Dots9, spinner_text);
 
                         let request = CodeRequest {
                             message: new_message.clone(),
