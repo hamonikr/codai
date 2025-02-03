@@ -3736,9 +3736,9 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
                             part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
                             msg.attach(part)
                     else:
-                        print(f"[WARNING] 첨부 파일을 찾을 수 없습니다: {file_path}")
+                        print(f"[WARNING] Can't find attachment file: {file_path}")
                 except Exception as e:
-                    print(f"[WARNING] 첨부 파일 처리 중 오류 발생: {str(e)}")
+                    print(f"[WARNING] Error processing attachment file: {str(e)}")
                     continue
         
         # SMTP 서버 연결 및 이메일 발송
@@ -3748,11 +3748,11 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
             server.login(smtp_config['username'], smtp_config['password'])
             server.send_message(msg)
             
-        print(f"[INFO] 이메일이 성공적으로 발송되었습니다: {to_email}")
+        print(f"[INFO] Email sent successfully: {to_email}")
         return True
         
     except Exception as e:
-        print(f"[ERROR] 이메일 발송 실패: {str(e)}")
+        print(f"[ERROR] Failed to send email: {str(e)}")
         return False
 
 # ============================================================================
