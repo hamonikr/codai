@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use serde_json::Value;
 use crate::config::Config;
 use crate::code_generator::generate_code;
-use crate::types::{CodeRequest, ExecutionResult};
+use crate::types::{CodeRequest, ExecutionResult, UTILS_PY, TOOLS_CONF};
 use std::sync::Mutex;
 use crate::history::{HistoryManager, RequestHistory, TokenUsage};
 use uuid::Uuid;
@@ -206,8 +206,7 @@ impl CodeExecutor {
         
         let python_version = String::from_utf8_lossy(&output.stdout).trim().to_string();
         
-        // utils.py 파일 복사 및 업데이트 로직
-        let source_path = PathBuf::from("src/tools/utils.py");
+        // utils.py 파일을 임베디드 리소스에서 생성
         let target_dir = if cfg!(windows) {
             self.venv_path.join("Lib").join("site-packages")
         } else {
@@ -222,25 +221,11 @@ impl CodeExecutor {
             fs::create_dir_all(&target_dir)?;
         }
 
-        // 파일 복사 여부 결정
-        let should_copy = if !target_path.exists() {
-            true
-        } else {
-            // 수정 시간 비교
-            let source_modified = fs::metadata(&source_path)?.modified()?;
-            let target_modified = fs::metadata(&target_path)?.modified()?;
-            source_modified > target_modified
-        };
+        // 항상 최신 버전의 utils.py 파일을 생성
+        fs::write(&target_path, UTILS_PY)?;
+        println!("{}", "Updated utils.py in virtual environment.".green());
 
-        if should_copy {
-            if let Err(e) = fs::copy(&source_path, &target_path) {
-                eprintln!("Warning: Failed to copy utils.py: {}", e);
-            } else {
-                println!("{}", "Updated utils.py in virtual environment.".green());
-            }
-        }
-
-        // 프롬프트 파일들 업데이트 로직
+        // tools.conf 파일을 임베디드 리소스에서 생성
         let config_dir = dirs::config_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?
             .join("codai");
@@ -249,52 +234,9 @@ impl CodeExecutor {
             fs::create_dir_all(&config_dir)?;
         }
 
-        // 프롬프트 파일 업데이트 함수
-        let update_prompt = |source: &str, target: &str| -> Result<()> {
-            let source_path = PathBuf::from(format!("src/prompts/{}", source));
-            let target_path = config_dir.join(target);
-
-            let should_update = if !target_path.exists() {
-                true
-            } else {
-                let source_modified = fs::metadata(&source_path)?.modified()?;
-                let target_modified = fs::metadata(&target_path)?.modified()?;
-                source_modified > target_modified
-            };
-
-            if should_update {
-                if let Err(e) = fs::copy(&source_path, &target_path) {
-                    eprintln!("Warning: Failed to copy {}: {}", source, e);
-                } else {
-                    println!("{}", format!("Updated {} in config directory.", target).green());
-                }
-            }
-            Ok(())
-        };
-
-        // tools.conf 파일 업데이트
-        let tools_source = PathBuf::from("src/tools/tools.conf");
-        let tools_target = config_dir.join("tools.conf");
-        
-        let should_update_tools = if !tools_target.exists() {
-            true
-        } else {
-            let source_modified = fs::metadata(&tools_source)?.modified()?;
-            let target_modified = fs::metadata(&tools_target)?.modified()?;
-            source_modified > target_modified
-        };
-
-        if should_update_tools {
-            if let Err(e) = fs::copy(&tools_source, &tools_target) {
-                eprintln!("Warning: Failed to copy tools.conf: {}", e);
-            } else {
-                println!("{}", "Updated tools.conf in config directory.".green());
-            }
-        }
-
-        // 각 프롬프트 파일 업데이트
-        update_prompt("system_prompt.txt", "system_prompt.txt")?;
-        update_prompt("code_review.txt", "code_review.txt")?;
+        let tools_conf_path = config_dir.join("tools.conf");
+        fs::write(&tools_conf_path, TOOLS_CONF)?;
+        println!("{}", "Updated tools.conf in config directory.".green());
 
         Ok(())
     }

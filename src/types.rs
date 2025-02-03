@@ -29,4 +29,10 @@ pub struct ExecutionResult {
     pub stdout: String,
     pub stderr: String,
     pub success: bool,
-} 
+}
+
+// Embedded resources
+pub const UTILS_PY: &str = include_str!("tools/utils.py");
+pub const SYSTEM_PROMPT: &str = include_str!("prompts/system_prompt.txt");
+pub const CODE_REVIEW_PROMPT: &str = include_str!("prompts/code_review.txt");
+pub const TOOLS_CONF: &str = include_str!("tools/tools.conf");

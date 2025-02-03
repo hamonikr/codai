@@ -1,6 +1,4 @@
-const SYSTEM_PROMPT: &str = include_str!("prompts/system_prompt.txt");
-const CODE_REVIEW_PROMPT: &str = include_str!("prompts/code_review.txt");
-
+use crate::types::{SYSTEM_PROMPT, CODE_REVIEW_PROMPT};
 use std::fs;
 use std::path::PathBuf;
 use anyhow::Result;
