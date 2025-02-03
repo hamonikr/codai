@@ -42,11 +42,10 @@ mod tests {
         let cli = Cli::try_parse_from(args).expect("Failed to parse code command with options");
         if let Some(cmd) = cli.command {
             match cmd {
-                crate::Commands::Code { message, language, run, feedback, provider, model } => {
+                crate::Commands::Code { message, language, run, provider, model } => {
                     assert_eq!(message, Some("print hello".to_string()));
                     assert_eq!(language, "python");
                     assert_eq!(run, true);
-                    assert_eq!(feedback, None);
                     assert_eq!(provider, Some("openai".to_string()));
                     assert_eq!(model, Some("gpt-3.5-turbo".to_string()));
                 }
@@ -59,9 +58,10 @@ mod tests {
         let cli = Cli::try_parse_from(args).expect("Failed to parse config command");
         if let Some(cmd) = cli.command {
             match cmd {
-                crate::Commands::Config { key, value } => {
+                crate::Commands::Config { key, value, history_command } => {
                     assert_eq!(key, "openai_api_key");
                     assert_eq!(value, Some("test_key".to_string()));
+                    assert!(history_command.is_none());
                 }
                 _ => panic!("Expected Config command"),
             }

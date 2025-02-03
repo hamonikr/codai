@@ -215,8 +215,8 @@ codai task --provider google --model gemini-pro "작업 요청"
 git clone https://github.com/hamonikr/codai.git
 cd codai
 
-# 릴리즈 모드로 빌드
-cargo build --release
+# 릴리즈 모드로 빌드 및 설치
+cargo build --release && cargo install --path .
 
 # 개발 의존성 설치
 cargo install --path .
