@@ -200,6 +200,13 @@ codai code --provider anthropic --model claude-3 "code generation request"
 codai task --provider google --model gemini-pro "task request"
 ```
 
+You can enable or disable the code review feature using the `codai config` command:
+
+```bash
+codai config code_review_enabled true   # Enable code review
+codai config code_review_enabled false  # Disable code review
+```
+
 ### History Management
 
 Codai now includes a comprehensive history management system that helps you track and analyze your AI interactions:
