@@ -221,9 +221,11 @@ impl CodeExecutor {
             fs::create_dir_all(&target_dir)?;
         }
 
-        // 항상 최신 버전의 utils.py 파일을 생성
-        fs::write(&target_path, UTILS_PY)?;
-        println!("{}", "Updated utils.py in virtual environment.".green());
+        // utils.py 파일이 없을 때만 생성
+        if !target_path.exists() {
+            fs::write(&target_path, UTILS_PY)?;
+            println!("{}", "Created utils.py in virtual environment.".green());
+        }
 
         // tools.conf 파일을 임베디드 리소스에서 생성
         let config_dir = dirs::config_dir()
@@ -235,8 +237,11 @@ impl CodeExecutor {
         }
 
         let tools_conf_path = config_dir.join("tools.conf");
-        fs::write(&tools_conf_path, TOOLS_CONF)?;
-        println!("{}", "Updated tools.conf in config directory.".green());
+        // tools.conf 파일이 없을 때만 생성
+        if !tools_conf_path.exists() {
+            fs::write(&tools_conf_path, TOOLS_CONF)?;
+            println!("{}", "Created tools.conf in config directory.".green());
+        }
 
         Ok(())
     }
