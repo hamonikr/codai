@@ -284,7 +284,7 @@ pub enum SystemRequirementError {
 pub fn setup_config() -> Result<()> {
     let mut config = Config::load()?;
     
-    println!("\nWelcome to Codai CLI Setup Wizard!");
+    println!("\nWelcome to Codai CLI Setup Wizard!\n");
     println!("Use arrow keys to navigate and Enter to select.\n");
 
     // Select AI service provider
@@ -296,7 +296,10 @@ pub fn setup_config() -> Result<()> {
         "Ollama".to_string()
     ];
     
-    println!("{}", "Please select an AI service provider:".cyan());
+    println!("\n{}", "Please select an AI service provider:".cyan());
+    println!("Choose the AI service you want to use for code generation and chat.");
+    println!("");  // 빈 줄 추가
+    
     let mut menu = Menu::new(providers);
     let provider = menu.run()?;
     
@@ -311,7 +314,11 @@ pub fn setup_config() -> Result<()> {
     };
 
     if needs_api_key {
-        print!("\nPlease enter your {} API key: ", provider);
+        // API 키 입력 받기
+        println!("\n{}", format!("API Key Configuration for {}:", provider).cyan());
+        println!("Your API key will be securely stored in the configuration file.");
+        println!("");  // 빈 줄 추가
+        print!("Please enter your {} API key: ", provider);
         std::io::stdout().flush()?;
         let mut api_key = String::new();
         std::io::stdin().read_line(&mut api_key)?;
@@ -330,27 +337,23 @@ pub fn setup_config() -> Result<()> {
     let models = match provider.as_str() {
         "OpenAI" => vec![
             "gpt-3.5-turbo".to_string(),
-            "gpt-4o-mini".to_string(),
-            "gpt-4o".to_string(),            
             "gpt-4-turbo".to_string(),
-            "gpt-4".to_string()
+            "gpt-4".to_string(),
+            "gpt-4-32k".to_string(),
+            "gpt-3.5-turbo-16k".to_string()
         ],
         "Anthropic" => vec![
-            "claude-3-5-sonnet-20241022".to_string(),
-            "claude-3-opus-20240229".to_string(),            
+            "claude-3-sonnet-20240229".to_string(),
+            "claude-3-opus-20240229".to_string(),
             "claude-3-haiku-20240307".to_string()
         ],
         "Gemini" => vec![
-            "gemini-2.0-flash-exp".to_string(),
-            "gemini-1.5-pro".to_string(),
-            "gemini-1.5-flash".to_string()
+            "gemini-pro".to_string(),
+            "gemini-pro-vision".to_string()
         ],
         "Groq" => vec![
             "mixtral-8x7b-32768".to_string(),
-            "llama-3.3-70b-versatile".to_string(),
-            "llama3-70b-8192".to_string(),
-            "gemma2-9b-it".to_string(),
-            "gemma-7b-it".to_string()
+            "llama2-70b-4096".to_string()
         ],
         "Ollama" => vec![
             "llama2".to_string(),
@@ -362,14 +365,21 @@ pub fn setup_config() -> Result<()> {
     };
     
     println!("\n{}", "Please select a model to use:".cyan());
-    let mut menu = Menu::new(models);
+    println!("Choose the AI model that best fits your needs. More capable models may have higher costs.");
+    println!("");  // 빈 줄 추가
+    
+    let mut menu = Menu::new(models.clone());
     let model = menu.run()?;
     
     // 코드 리뷰 기능 활성화 여부 설정
     println!("\n{}", "Enable code review feature?".cyan());
+    println!("This feature provides automated code review and suggestions.");
+    println!("");  // 메뉴와 설명 사이에 빈 줄 추가
+    
     let review_options = vec!["Yes".to_string(), "No".to_string()];
     let mut menu = Menu::new(review_options);
     let review_choice = menu.run()?;
+    
     config.code_review_enabled = Some(review_choice == "Yes");
     
     // Save configuration
@@ -377,50 +387,18 @@ pub fn setup_config() -> Result<()> {
     config.default_model = Some(model);
     config.save()?;
     
-    if cfg!(target_os = "windows") {
-        println!("\n{}", "Configuration saved successfully!".green());
-        println!("\nConfiguration file location:");
-        println!("%APPDATA%\\codai\\config.toml");
-        println!("(Usually at C:\\Users\\username\\AppData\\Roaming\\codai\\config.toml)");
-        println!("\nTo manually modify settings, open the above file with Notepad or another text editor and edit in this format:");
-        println!("default_provider = \"{}\"  # AI provider (openai, anthropic, gemini, groq, ollama)", config.default_provider.as_ref().unwrap_or(&"openai".to_string()));
-        println!("default_model = \"{}\"     # Model to use", config.default_model.as_ref().unwrap_or(&"gpt-3.5-turbo".to_string()));
-        println!("code_review_enabled = {}   # Enable/disable code review feature", config.code_review_enabled.unwrap_or(true));
-        if let Some(key) = &config.openai_api_key {
-            println!("openai_api_key = \"{}...\"  # API key", &key[..6]);
-        }
-        println!("\nOr install Windows Terminal to use the interactive configuration menu.");
-    } else {
-        println!("\n{}", "Configuration saved successfully!".green());
-        println!("Current settings:");
-        println!("- AI Service: {}", config.default_provider.unwrap_or_default());
-        println!("- Model: {}", config.default_model.unwrap_or_default());
-        println!("- Code Review: {}", if config.code_review_enabled.unwrap_or(true) { "Enabled" } else { "Disabled" });
-    }
+    // 설정 저장 결과 표시
+    println!("\n{}", "=".repeat(50).yellow());
+    println!("{}", "Configuration saved successfully!".green());
+    println!("\nCurrent settings:");
+    println!("- AI Service: {}", config.default_provider.as_ref().unwrap_or(&"".to_string()));
+    println!("- Model: {}", config.default_model.as_ref().unwrap_or(&"".to_string()));
+    println!("- Code Review: {}", if config.code_review_enabled.unwrap_or(true) { "Enabled" } else { "Disabled" });
     
-    // API 키 정보 출력 (Windows가 아닌 경우에만)
-    if !cfg!(target_os = "windows") {
-        if let Some(key) = &config.openai_api_key {
-            if !key.is_empty() {
-                println!("- OpenAI API Key: {}...", &key[..6]);
-            }
-        }
-        if let Some(key) = &config.anthropic_api_key {
-            if !key.is_empty() {
-                println!("- Anthropic API Key: {}...", &key[..6]);
-            }
-        }
-        if let Some(key) = &config.google_api_key {
-            if !key.is_empty() {
-                println!("- Google API Key: {}...", &key[..6]);
-            }
-        }
-        if let Some(key) = &config.groq_api_key {
-            if !key.is_empty() {
-                println!("- Groq API Key: {}...", &key[..6]);
-            }
-        }
-    }
+    let config_path = get_config_path();
+    println!("\nConfiguration file location:");
+    println!("{}", config_path.display());
+    println!("{}", "=".repeat(50).yellow());
     
     Ok(())
 } 

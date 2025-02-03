@@ -98,7 +98,7 @@ async fn handle_code_command(
     };
 
     let spinner_text = if cfg!(windows) {
-        "Generating code..."
+        "Generating code...".to_string()
     } else {
         "Generating code...".cyan().to_string()
     };
@@ -371,7 +371,7 @@ async fn handle_code_command(
                         }
 
                         let spinner_text = if cfg!(windows) {
-                            "Generating code..."
+                            "Generating code...".to_string()
                         } else {
                             "Generating code...".cyan().to_string()
                         };

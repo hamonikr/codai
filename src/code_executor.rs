@@ -96,6 +96,30 @@ impl CodeExecutor {
         }
     }
 
+    fn get_python_command() -> Result<String> {
+        // Try python3 first (Unix-like systems)
+        if !cfg!(windows) {
+            let output = Command::new("python3")
+                .arg("--version")
+                .output();
+            
+            if output.is_ok() && output.unwrap().status.success() {
+                return Ok("python3".to_string());
+            }
+        }
+        
+        // Try python (Windows default or fallback)
+        let output = Command::new("python")
+            .arg("--version")
+            .output();
+            
+        if output.is_ok() && output.unwrap().status.success() {
+            return Ok("python".to_string());
+        }
+        
+        Err(anyhow::anyhow!("Python interpreter not found. Please install Python 3.x"))
+    }
+
     pub fn execute_code(&mut self, code: &str) -> Result<ExecutionResult> {
         let sp = create_spinner("Preparing code execution...");
         
@@ -155,9 +179,10 @@ impl CodeExecutor {
     pub fn setup_venv(&mut self) -> Result<()> {
         if !self.venv_path.exists() {
             let sp = create_spinner("Setting up Python virtual environment...");
-            let python = if cfg!(windows) { "python" } else { "python3" };
             
-            let status = Command::new(python)
+            let python = Self::get_python_command()?;
+            
+            let status = Command::new(&python)
                 .args(&["-m", "venv", self.venv_path.to_str().unwrap()])
                 .status()?;
 
@@ -166,11 +191,26 @@ impl CodeExecutor {
                 return Err(anyhow::anyhow!("Failed to create virtual environment"));
             }
 
-            let pip_path = if cfg!(windows) {
-                self.venv_path.join("Scripts").join("pip.exe")
+            // Get platform-specific paths
+            let (pip_path, site_packages_path) = if cfg!(windows) {
+                (
+                    self.venv_path.join("Scripts").join("pip.exe"),
+                    self.venv_path.join("Lib").join("site-packages")
+                )
             } else {
-                self.venv_path.join("bin").join("pip")
+                let python_version = self.get_python_version()?;
+                (
+                    self.venv_path.join("bin").join("pip"),
+                    self.venv_path.join("lib")
+                        .join(format!("python{}", python_version))
+                        .join("site-packages")
+                )
             };
+
+            // Create site-packages directory if it doesn't exist
+            if !site_packages_path.exists() {
+                fs::create_dir_all(&site_packages_path)?;
+            }
 
             sp.set_message("Upgrading pip...");
             let status = Command::new(&pip_path)
@@ -199,19 +239,12 @@ impl CodeExecutor {
             sp.finish_and_clear();
         }
 
-        // Get Python version
-        let output = Command::new(&self.python_path)
-            .args(&["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"])
-            .output()?;
-        
-        let python_version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        
         // utils.py 파일을 임베디드 리소스에서 생성
         let target_dir = if cfg!(windows) {
             self.venv_path.join("Lib").join("site-packages")
         } else {
             self.venv_path.join("lib")
-                .join(format!("python{}", python_version))
+                .join(format!("python{}", self.get_python_version()?))
                 .join("site-packages")
         };
         let target_path = target_dir.join("utils.py");
@@ -244,6 +277,18 @@ impl CodeExecutor {
         }
 
         Ok(())
+    }
+
+    fn get_python_version(&self) -> Result<String> {
+        let output = Command::new(&self.python_path)
+            .args(&["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"])
+            .output()?;
+        
+        if !output.status.success() {
+            return Err(anyhow::anyhow!("Failed to get Python version"));
+        }
+        
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
 
     pub fn install_package(&mut self, package: &str) -> Result<()> {
