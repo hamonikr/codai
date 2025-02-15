@@ -20,10 +20,22 @@ fn get_config_dir() -> Option<PathBuf> {
 fn ensure_prompt_file(filename: &str, default_content: &str) -> Result<PathBuf> {
     if let Some(config_dir) = get_config_dir() {
         let prompt_path = config_dir.join(filename);
-        if !prompt_path.exists() {
+        
+        // Check if file needs to be updated
+        let should_update = if prompt_path.exists() {
+            match fs::read_to_string(&prompt_path) {
+                Ok(current_content) => current_content != default_content,
+                Err(_) => true // Update if we can't read the current file
+            }
+        } else {
+            true // Create new file if it doesn't exist
+        };
+
+        if should_update {
             fs::write(&prompt_path, default_content)?;
-            println!("Created default prompt file: {}", prompt_path.display());
+            println!("Updated prompt file: {}", prompt_path.display());
         }
+        
         Ok(prompt_path)
     } else {
         Err(anyhow::anyhow!("Could not create config directory"))

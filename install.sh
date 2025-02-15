@@ -202,6 +202,118 @@ install_binary() {
     print_status "Successfully installed codai to $install_dir/$binary_name"
 }
 
+# Install completion scripts
+install_completion() {
+    local completion_dir
+    local zsh_completion_dir
+    
+    # Bash completion
+    if [ "$(id -u)" -eq 0 ]; then
+        completion_dir="/usr/share/bash-completion/completions"
+    else
+        completion_dir="$HOME/.local/share/bash-completion/completions"
+        mkdir -p "$completion_dir"
+    fi
+    
+    # Zsh completion
+    if [ "$(id -u)" -eq 0 ]; then
+        zsh_completion_dir="/usr/share/zsh/site-functions"
+    else
+        zsh_completion_dir="$HOME/.local/share/zsh/site-functions"
+        mkdir -p "$zsh_completion_dir"
+    fi
+    
+    # Create bash completion script
+    cat > "$completion_dir/codai" << 'EOF'
+#!/bin/bash
+
+_codai_completion() {
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    opts="chat code task config history help --setup --help --version"
+
+    case "${prev}" in
+        codai)
+            COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+            return 0
+            ;;
+        chat|code|task|config|history|help)
+            COMPREPLY=( $(compgen -W "--help" -- ${cur}) )
+            return 0
+            ;;
+        *)
+            COMPREPLY=()
+            return 0
+            ;;
+    esac
+}
+
+complete -F _codai_completion codai
+EOF
+
+    # Create zsh completion script
+    cat > "$zsh_completion_dir/_codai" << 'EOF'
+#compdef codai
+
+_codai() {
+    local -a commands
+    commands=(
+        'chat:Chat with AI'
+        'code:Generate and execute code'
+        'task:Execute complex task'
+        'config:Configure settings'
+        'history:History management'
+        'help:Print help information'
+    )
+
+    _arguments -C \
+        '(-h --help)'{-h,--help}'[Print help information]' \
+        '(-V --version)'{-V,--version}'[Print version]' \
+        '(-s --setup)'{-s,--setup}'[Setup configuration]' \
+        '*:: :->subcmds' && return 0
+
+    if (( CURRENT == 1 )); then
+        _describe -t commands "codai subcommands" commands
+        return
+    fi
+
+    case "$words[1]" in
+        chat|code|task|config|history|help)
+            _arguments \
+                '(-h --help)'{-h,--help}'[Print help information]'
+            ;;
+    esac
+}
+
+_codai "$@"
+EOF
+
+    # Set permissions
+    chmod +x "$completion_dir/codai" "$zsh_completion_dir/_codai"
+
+    # Add completion to shell config if not already present
+    local bash_completion_config="# Codai completion\nif [ -f $completion_dir/codai ]; then\n    . $completion_dir/codai\nfi"
+    local zsh_completion_config="# Codai completion\nfpath=($zsh_completion_dir \$fpath)\nautoload -Uz compinit\ncompinit"
+    
+    # Add to .bashrc if it exists
+    if [ -f "$HOME/.bashrc" ]; then
+        if ! grep -q "Codai completion" "$HOME/.bashrc"; then
+            echo -e "\n$bash_completion_config" >> "$HOME/.bashrc"
+        fi
+    fi
+    
+    # Add to .zshrc if it exists
+    if [ -f "$HOME/.zshrc" ]; then
+        if ! grep -q "Codai completion" "$HOME/.zshrc"; then
+            echo -e "\n$zsh_completion_config" >> "$HOME/.zshrc"
+        fi
+    fi
+
+    print_status "Installed shell completion scripts"
+}
+
 # Main installation process
 main() {
     print_status "Starting codai installation..."
@@ -220,12 +332,15 @@ main() {
     # Install binary
     install_binary "$os_arch"
     
+    # Install completion scripts
+    install_completion
+    
     # Final setup
     print_status "Installation completed successfully!"
     print_status "To get started, run: codai --help"
     
     # Notify about shell restart
-    print_warning "Please restart your shell or run 'source ~/.bashrc' (or ~/.zshrc) to update your PATH"
+    print_warning "Please restart your shell or run 'source ~/.bashrc' (or ~/.zshrc) to update your PATH and enable completions"
 }
 
 # Run main installation

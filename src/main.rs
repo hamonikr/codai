@@ -28,6 +28,7 @@ use crate::ui::Menu;
 use spinners::{Spinner, Spinners};
 use crate::task_executor::TaskManager;
 use crate::history::{HistoryManager, RequestHistory};
+use env_logger;
 
 async fn handle_chat_command(
     message: Option<String>,
@@ -702,6 +703,8 @@ async fn handle_history_command(command: args::HistoryCommands, config: &Config)
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::init();
+    
     // Initialize default prompts
     if let Err(e) = prompts::init_default_prompts() {
         eprintln!("Warning: Failed to initialize default prompts: {}", e);
