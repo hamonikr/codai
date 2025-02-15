@@ -51,130 +51,47 @@ from PIL import Image
 import random
 import urllib.parse
 import re
+import aiohttp
+import asyncio
+import configparser
+from pathlib import Path
+from fpdf import FPDF
 
-class Config:
-    """설정 관리를 위한 클래스"""
-    _instance = None
-    _config = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if self._config is None:
-            self._config = self._load_config()
-
-    def reload(self):
-        """설정을 다시 로드합니다."""
-        self._config = self._load_config()
-        return self._config
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """설정값을 가져옵니다."""
-        return self._config.get(key, default)
-
-    def get_smtp_settings(self) -> dict:
-        """SMTP 설정을 딕셔너리로 반환합니다."""
-        return {
-            'host': self.get('SMTP_HOST', 'smtp.gmail.com'),
-            'port': int(self.get('SMTP_PORT', '587')),
-            'username': self.get('SMTP_USERNAME', ''),
-            'password': self.get('SMTP_PASSWORD', ''),
-            'secure': self.get('SMTP_SECURE', 'YES').upper() not in ['NO', 'N']
-        }
-
-    @staticmethod
-    def _load_config() -> dict:
-        """
-        ~/.config/codai/tools.conf 파일에서 설정을 읽어옵니다.
-        파일이 없는 경우 기본 설정으로 생성합니다.
+def load_config() -> dict:
+    """
+    ~/.airun/airun.conf 파일에서 설정을 읽어옵니다.
+    
+    Returns:
+        dict: 설정값들을 담은 딕셔너리
+    """
+    config = {}
+    config_path = os.path.expanduser("~/.airun/airun.conf")
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and line.startswith('export '):
+                    # 'export KEY="VALUE"' 형식 파싱
+                    line = line.replace('export ', '')
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    config[key] = value
+    except Exception as e:
+        print(f"[WARNING] 설정 파일 로드 실패: {str(e)}")
         
-        Returns:
-            dict: 설정값들을 담은 딕셔너리
-        """
-        config = {}
-        config_dir = os.path.expanduser("~/.config/codai")
-        config_path = os.path.join(config_dir, "tools.conf")
-        
-        # 기본 SMTP 설정
-        default_config = {
-            'SMTP_HOST': 'smtp.gmail.com',
-            'SMTP_PORT': '587',
-            'SMTP_USERNAME': '',
-            'SMTP_PASSWORD': '',
-            'SMTP_SECURE': 'YES'
-        }
-        
-        # 설정 디렉토리가 없으면 생성
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-        
-        # 설정 파일이 없으면 기본 설정으로 생성
-        if not os.path.exists(config_path):
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write("""# Codai Tools 설정 파일
-# 이 파일은 자동으로 생성되었습니다.
-# 각 설정값을 필요에 맞게 수정해주세요.
+    return config
 
-# =============================================================================
-# SMTP 이메일 설정
-# =============================================================================
-# Gmail을 사용하는 경우:
-# - SMTP_HOST는 'smtp.gmail.com' 사용
-# - SMTP_PORT는 587 (TLS) 또는 465 (SSL) 사용
-# - SMTP_USERNAME에 Gmail 주소 입력
-# - SMTP_PASSWORD에 앱 비밀번호 입력 (Gmail 계정 설정에서 생성 필요)
-# - SMTP_SECURE는 TLS 사용시 YES, 미사용시 NO
-
-# Naver 메일을 사용하는 경우:
-# SMTP_HOST=smtp.naver.com
-# SMTP_PORT=587
-
-# 다음 메일을 사용하는 경우:
-# SMTP_HOST=smtp.daum.net
-# SMTP_PORT=465
-
-# 현재 설정값:
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=
-SMTP_PASSWORD=
-SMTP_SECURE=YES
-""")
-            print(f"[INFO] 기본 설정 파일이 생성되었습니다: {config_path}")
-            print("[INFO] SMTP 설정을 완료하려면 파일을 직접 수정해주세요.")
-        
-        # 설정 파일 읽기
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#'):  # 주석 무시
-                        try:
-                            key, value = line.split('=', 1)
-                            key = key.strip()
-                            value = value.strip().strip('"').strip("'")
-                            config[key] = value
-                        except ValueError:
-                            continue  # 잘못된 형식의 라인은 무시
-        except Exception as e:
-            print(f"[ERROR] 설정 파일 읽기 실패: {str(e)}")
-            return default_config
-        
-        # 필수 SMTP 설정이 없는 경우 기본값으로 설정
-        for key, value in default_config.items():
-            if key not in config:
-                config[key] = value
-        
-        return config
-
-# 전역 설정 객체 생성
-config = Config()
-
-# 기존 전역 변수 제거
-# SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD 변수는 더 이상 사용하지 않음
+# 설정 파일에서 SMTP 설정 로드
+config = load_config()
+SMTP_HOST = config.get("SMTP_HOST", "smtp.worksmobile.com")  # 기본값 설정
+try:
+    SMTP_PORT = int(config.get("SMTP_PORT", "587"))  # 기본값 설정
+except (ValueError, TypeError):
+    SMTP_PORT = 587  # 변환 실패시 기본값 사용
+SMTP_USERNAME = config.get("SMTP_USERNAME", "")
+SMTP_PASSWORD = config.get("SMTP_PASSWORD", "")
 
 def install_if_missing(package: str, import_name: str = None) -> None:
     """Install a package if it's not already installed
@@ -215,7 +132,7 @@ def install_if_missing(package: str, import_name: str = None) -> None:
                 pip_path, "install", "--quiet", package
             ], check=True)
             
-            print(f"[INFO] Successfully installed {package}")
+            # print(f"[INFO] Successfully installed {package}")
             
             # 설치 후 import 확인
             if package == "pyhwp":
@@ -247,7 +164,7 @@ REQUIRED_PACKAGES = [
     ("selenium", "selenium"),
     ("webdriver_manager", "webdriver_manager"),
     ("beautifulsoup4", "bs4"),
-    ("lxml", "lxml"),
+    ("lxml[html_clean]", "lxml"),  # html_clean feature 포함
     ("python-docx", "docx"),
     ("trafilatura", "trafilatura"),
     ("cairosvg", "cairosvg")
@@ -257,13 +174,12 @@ REQUIRED_PACKAGES = [
 # print("\n[INFO] Checking required packages...")
 for package, import_name in REQUIRED_PACKAGES:
     try:
-        # pkg_resources를 사용하여 설치 여부 확인
-        pkg_resources.require(package)
+        # importlib를 사용하여 모듈 import 시도
         if import_name:
             __import__(import_name)
         else:
             __import__(package.replace('-', '_'))
-    except (pkg_resources.DistributionNotFound, ImportError):
+    except ImportError:
         print(f"[INFO] Installing missing package: {package}")
         install_if_missing(package, import_name)
         
@@ -370,7 +286,7 @@ def convert_image_to_rgb(img):
 
 class HWPDocument:
     def __init__(self):
-        self.elements = []  # (type, content, page_break) 튜플 리스트
+        self.elements = []  # (type, content, page_break, options) 튜플 리스트
         self.has_title = False  # 제목 존재 여부 추적
         # ~/.airun/templates 디렉토리에서 템플릿 파일 찾기
         self.template_path = os.path.expanduser('~/.airun/templates/blank.hwpx')
@@ -382,285 +298,270 @@ class HWPDocument:
         self._temp_files = []  # Track temporary files for cleanup
         
     def _preprocess_text(self, text):
-        """
-        특수문자와 글머리 기호를 처리하는 내부 메서드
-        """
+        """텍스트를 전처리합니다."""
         if not text:
             return text
             
-        # 특수한 공백 문자를 일반 공백으로 변환
-        text = text.replace('\u3000', ' ')  # 전각 공백
-        text = text.replace('\u200b', '')   # 제로 너비 공백
-        text = text.replace('\ufeff', '')   # BOM
-
-        # 특수문자 제거 (한글, 영문, 숫자, 일부 문장부호만 유지)
-        # text = re.sub(r'[^\w\s\.,\(\)\[\]:/가-힣]', '', text)  # URL의 :/ 문자 유지
-                
-        # 연속된 공백을 하나로
-        text = ' '.join(text.split())
+        # 마크다운 형식이 있는 경우 그대로 반환
+        if re.match(r'^#{1,6}\s+', text.strip()) or re.match(r'^\d+\.\s+', text.strip()):
+            return text
             
-        # XML 특수문자 이스케이프
-        text = text.replace('&', '&amp;')
-        text = text.replace('<', '&lt;')
-        text = text.replace('>', '&gt;')
-        text = text.replace('"', '&quot;')
-        text = text.replace("'", '&apos;')
-        
-        # HWP 문서에서 사용되는 특수문자 처리
-        text = text.replace('&amp;lt;', '[')
-        text = text.replace('&amp;gt;', ']')
-        text = text.replace('&amp;amp;', '&')
-        text = text.replace('&amp;quot;', '"')
-        
-        # 연속된 공백을 하나로
-        text = re.sub(r'\s+', ' ', text)
-        
-        # 글머리 기호 처리
-        bullet_markers = ['•', '○', '●', '□', '■', '△', '▲', '▽', '▼', '◁', '◀', '▷', '▶',
-                         '♠', '♡', '♣', '♤', '♥', '♧', '⊙', '◎', '▣', '◈', '▨', '▧', '▦', '▩',
-                         '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
-                         '㉠', '㉡', '㉢', '㉣', '㉤', '㉥', '㉦', '㉧', '㉨', '㉩',
-                         'Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
-                         
-        # 기존 글머리 기호 앞에 공백 추가
-        for marker in bullet_markers:
-            if text.startswith(marker):
-                text = ' ' + text
-                break
-                
-        # 일반적인 글머리 기호 처리 - 글머리기호는 새줄에 추가
-        if text.startswith('- ') or text.startswith('* ') or text.startswith('+ '):
-            text = ' ' + text
-            
-        # 숫자 글머리 기호 처리 (예: "1. ", "1.1. " 등)
-        if re.match(r'^\d+\.(\d+\.)?\s', text):
-            text = ' ' + text
-            
-        # 알파벳 글머리 기호 처리 (예: "A. ", "a. " 등)
-        if re.match(r'^[A-Za-z]\.(\d+\.)?\s', text):
-            text = ' ' + text
-            
-        # 줄 끝의 불필요한 공백 제거
-        text = text.rstrip()
-        
-        # 줄 바꿈 문자 정규화
+        # 나머지 텍스트 전처리
         text = text.replace('\r\n', '\n').replace('\r', '\n')
+        text = re.sub(r'\n{3,}', '\n\n', text)  # 3개 이상 연속된 줄바꿈을 2개로
+        text = text.strip()
         
         return text
 
     def _split_long_text(self, text, max_length=60):
+        """긴 텍스트를 적절한 길이로 분리합니다."""
         sentences = []
-        for paragraph in text.split('\n\n'):
-            # 문장 단위로 분리 (마침표, 물음표, 느낌표 기준)
-            for sentence in paragraph.replace('. ', '.\n').replace('? ', '?\n').replace('! ', '!\n').split('\n'):
-                sentence = sentence.strip()
-                if not sentence:
-                    continue
-                    
-                # 문장이 max_length보다 길면 추가로 분리
-                while len(sentence) > max_length:
-                    # 공백을 기준으로 단어 분리
-                    split_idx = sentence[:max_length].rfind(' ')
-                    if split_idx == -1:  # 공백을 찾지 못한 경우
-                        split_idx = max_length
-                    sentences.append(sentence[:split_idx].strip())
-                    sentence = sentence[split_idx:].strip()
+        # 먼저 줄바꿈으로 분리
+        for paragraph in text.split('\n'):
+            paragraph = paragraph.strip()
+            if not paragraph:
+                sentences.append('')
+                continue
                 
-                if sentence:  # 남은 문장 추가
-                    sentences.append(sentence)
+            # 문장이 max_length보다 길면 추가로 분리
+            while len(paragraph) > max_length:
+                # 공백을 기준으로 단어 분리
+                split_idx = paragraph[:max_length].rfind(' ')
+                if split_idx == -1:  # 공백을 찾지 못한 경우
+                    split_idx = max_length
+                sentences.append(paragraph[:split_idx].strip())
+                paragraph = paragraph[split_idx:].strip()
             
-            # 문단 구분을 위해 빈 문장 추가
-            sentences.append('')
+            if paragraph:  # 남은 문장 추가
+                sentences.append(paragraph)
         
-        return sentences    
+        return sentences
 
     def _join_broken_lines(self, lines):
         """잘린 문장을 하나로 합칩니다."""
         result = []
         current = []
         
+        def is_list_item(line):
+            """목차 항목인지 확인"""
+            stripped = line.strip()
+            # 마크다운 헤더와 숫자가 함께 있는 경우는 목차 항목으로 처리하지 않음
+            if stripped.startswith('#') and re.search(r'#+ \d+\.', stripped):
+                return False
+            # 숫자로 시작하고 점이나 괄호가 있는 경우
+            if re.match(r'^\d+[\.\)]', stripped):
+                return True
+            # 점이 많이 반복되는 경우 (목차의 점선)
+            if '.' * 3 in stripped:
+                return True
+            return False
+            
+        def should_break_line(line):
+            """줄바꿈이 필요한지 확인"""
+            markers = ['다.', '까?', '요.', '임.', '됨.', '함.', '.', '?', '!', 
+                      '[Page', 'http://', 'https://', '제', '장', '절']
+            stripped = line.strip()
+            
+            # 마크다운 헤더는 그대로 유지
+            if stripped.startswith('#'):
+                return True
+                
+            return any(stripped.endswith(m) for m in markers) or is_list_item(stripped)
+        
         for line in lines:
-            stripped = self._preprocess_text(line)
+            stripped = line.strip()
+            
+            # 마크다운 헤더는 그대로 유지
+            if stripped.startswith('#'):
+                if current:
+                    result.append(' '.join(current))
+                    current = []
+                result.append(line)
+                continue
+            
+            # 빈 줄 처리
             if not stripped:
                 if current:
                     result.append(' '.join(current))
                     current = []
                 result.append('')
-            elif line[0].isspace() and current:  # 들여쓰기된 줄이 이어지는 경우
+                continue
+                
+            # 목차 항목이나 줄바꿈이 필요한 경우
+            if should_break_line(stripped):
+                if current:
+                    result.append(' '.join(current))
+                    current = []
+                result.append(line)
+                continue
+                
+            # 들여쓰기된 새로운 문단
+            if line[0].isspace() and not current:
+                result.append(line)
+                continue
+                
+            # URL이나 특수 형식
+            if any(marker in stripped for marker in ['http://', 'https://', '[Page']):
+                if current:
+                    result.append(' '.join(current))
+                    current = []
+                result.append(line)
+                continue
+                
+            # 일반적인 문장 연결
+            if current:
                 current.append(stripped)
             else:
-                if current:
-                    # 마지막 단어가 잘린 것 같은 경우 현재 줄과 합치기
-                    last_word = current[-1].split()[-1]
-                    if not any(current[-1].endswith(end) for end in ['다.', '까?', '요.', '임.', '됨.', '함.', '다']) and \
-                    (len(last_word) >= 2 and not last_word[-1].isalnum() or \
-                        current[-1][-1] in [',', '.'] or \
-                        len(current[-1]) > 60):  # 긴 문장은 이어질 가능성이 높음
-                        current.append(stripped)
-                    else:
-                        result.append(' '.join(current))
-                        current = [stripped]
-                else:
-                    if stripped.endswith(('다.', '까?', '요.', '임.', '됨.', '함.', '다')) and len(stripped) < 60:
-                        result.append(stripped)
-                    else:
-                        current = [stripped]
+                current = [stripped]
         
+        # 남은 문장 처리
         if current:
             result.append(' '.join(current))
         
-        # 불필요한 공백 제거
-        result = [line.strip() for line in result]
-        
-        # 빈 줄이 연속되지 않도록
-        final_result = []
-        prev_empty = True
-        
-        for line in result:
-            if line or not prev_empty:
-                final_result.append(line)
-            prev_empty = not line
-        
-        return final_result
+        return result
 
     def _normalize_content(self, content):
-        """파일 내용을 정규화합니다."""
-        # 모든 줄의 끝에 있는 공백 제거
-        lines = [line.rstrip() for line in content.split('\n')]
+        """파일 내용을 정규화하면서 원본 포맷을 최대한 유지합니다."""
+        if isinstance(content, (list, tuple)):
+            content = '\n'.join(str(item) for item in content)
         
-        # 빈 줄 처리
-        result = []
-        prev_empty = True  # 시작 부분의 빈 줄 제거를 위해
+        if not isinstance(content, str):
+            content = str(content)
+
+        # ** 문자 제거
+        content = re.sub(r'\*\*', '', content)
         
-        # 잘린 문장 합치기
+        lines = content.split('\n')
         lines = self._join_broken_lines(lines)
         
+        result = []
+        prev_empty = True
+        
         for line in lines:
-            # 현재 줄이 비어있는지 확인
-            is_empty = not line.strip()
-            
-            # 빈 줄이 연속되지 않도록 처리
-            if is_empty:
-                if not prev_empty:
-                    result.append('')
+            if line.strip() in ['<그림>', '<표>']:
+                continue
+                
+            if not line.strip():
+                result.append('')
                 prev_empty = True
-            else:
-                # 실제 내용이 있는 줄 처리
-                stripped = line.strip()
-                # 들여쓰기가 있는 경우 4칸으로 통일
-                if line[0].isspace():
-                    result.append('    ' + stripped)
-                else:
-                    result.append(stripped)
+                continue
+            
+            stripped = line.strip()
+            
+            # 마크다운 헤더 확인 (#, ##, ###)
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            if header_match:
+                level = len(header_match.group(1))
+                text = header_match.group(2).strip()
+                # 레벨에 따른 스타일 매핑 (# = 3, ## = 4, ### = 5, ...)
+                style_id = str(2 + level)  # level이 1(#)이면 3, 2(##)이면 4, 3(###)이면 5
+                result.append(('heading', text, False, {'size': style_id}))
                 prev_empty = False
+                continue
+            
+            # 숫자로 시작하는 제목 패턴 (### 1. 형식)
+            numbered_title_match = re.match(r'^(#{1,6})\s+(\d+\.)\s+(.+)$', stripped)
+            if numbered_title_match:
+                level = len(numbered_title_match.group(1))
+                number = numbered_title_match.group(2)
+                text = numbered_title_match.group(3).strip()
+                style_id = str(2 + level)  # 레벨에 따른 스타일 매핑 사용
+                result.append(('heading', f"{number} {text}", False, {'size': style_id}))
+                prev_empty = False
+                continue
+            
+            # 일반 텍스트
+            result.append(line)
+            prev_empty = False
         
-        # 마지막 빈 줄 제거
-        while result and not result[-1]:
-            result.pop()
-        
-        return '\n'.join(result)
+        return result
 
-    def add_heading(self, text, **kwargs):
-        """
-        제목 스타일의 문단을 추가합니다. 모든 제목은 동일한 스타일(14pt, 굵게)로 적용됩니다.
-        """
-        self.elements.append(('heading', text, False))
-        self.has_title = True  # 제목이 추가되었음을 표시
-        
-    def add_paragraph(self, text):
-        """
-        문단을 추가합니다. 여러 줄의 텍스트인 경우 자동으로 add_text_content를 호출합니다.
-        긴 텍스트는 자동으로 분리되어 여러 문단으로 추가됩니다.
-        
+    def add_heading(self, text, page_break=False, options=None):
+        """문서에 제목을 추가합니다.
         Args:
-            text (str): 추가할 텍스트 (단일 또는 여러 줄)
+            text (str): 제목 텍스트
+            page_break (bool): 페이지 나누기 여부
+            options (dict): 추가 옵션 (예: {'size': '8'})
+        """
+        if not options:
+            options = {'size': '3'}
+        self.elements.append(('heading', text, page_break, options))
+        self.has_title = True
+
+    def add_paragraph(self, text, page_break=False, options=None):
+        """문서에 단락을 추가합니다.
+        Args:
+            text: 추가할 텍스트 (str, list, DataFrame 등 다양한 타입 지원)
+            page_break (bool): 페이지 나누기 여부
+            options (dict): 추가 옵션
         """
         if not text:  # 빈 텍스트 처리
             return
             
-        text = str(text).strip()
-        
-        # 여러 줄의 텍스트인지 확인
-        if '\n' in text:
-            # 여러 줄이면 add_text_content 호출
-            text = self._normalize_content(text)
-            self.add_text_content(text)
-        else:
-            # 단일 줄이면 기존 로직 수행
-            if text in ['<그림>', '<표>']:  # 특수 마커 처리
-                return
+        # DataFrame 처리
+        if hasattr(text, 'to_string'):  # pandas DataFrame인 경우
+            # DataFrame을 표로 변환
+            header = text.columns.tolist()
+            data = text.values.tolist()
+            self.add_table(data, header=header)
+            return
+            
+        # 리스트나 튜플을 문자열로 변환
+        if isinstance(text, (list, tuple)):
+            text = '\n'.join(str(item) for item in text)
+        # 그 외 타입은 str로 변환
+        elif not isinstance(text, str):
+            text = str(text)
+            
+        # 줄 단위로 처리
+        lines = text.split('\n')
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
                 
-            # 제목이 없는 경우 처리
-            if not self.has_title:
-                self.add_heading(text)
-                self.has_title = True
-                return
+            # 마크다운 헤더 확인 (##, ###)
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+            if header_match:
+                level = len(header_match.group(1))
+                title_text = header_match.group(2).strip()
+                # 레벨에 따른 스타일 매핑 (# = 3, ## = 4, ### = 5, ...)
+                style_id = str(2 + level)  # level이 1(#)이면 3, 2(##)이면 4, 3(###)이면 5
+                self.add_heading(title_text, page_break=page_break, options={'size': style_id})
+                continue
             
-            # 특수문자와 글머리 기호 처리
-            processed_text = self._preprocess_text(text)
+            # 숫자로 시작하는 제목 패턴 (### 1. 형식)
+            numbered_title_match = re.match(r'^###\s+(\d+\.)\s+(.+)$', stripped)
+            if numbered_title_match:
+                number = numbered_title_match.group(1)
+                title_text = numbered_title_match.group(2).strip()
+                self.add_heading(f"{number} {title_text}", page_break=page_break, options={'size': '5'})
+                continue
             
-            # 긴 텍스트 처리
-            if len(processed_text) > 60:  # 60자 이상인 경우
-                for sentence in self._split_long_text(processed_text):
-                    if sentence.strip():
-                        self.elements.append(('paragraph', sentence.strip(), False))
-            else:
-                self.elements.append(('paragraph', processed_text, False))
+            # 일반 텍스트는 add_text_content로 처리
+            self.add_text_content(line)
 
     def add_text_content(self, text):
-        """
-        여러 줄의 텍스트 내용을 자동으로 처리하여 추가합니다.
-        각 문단은 빈 줄로 구분되며, 긴 문단은 자동으로 분리됩니다.
-        
-        Args:
-            text (str): 추가할 텍스트 내용 (여러 줄 가능)
-        """
+        """일반 텍스트 내용을 문서에 추가합니다."""
         if not text:
             return
             
-        # 전체 텍스트 전처리
-        text = self._preprocess_text(text)
-        text = self._normalize_content(text)        
-        
-        # 빈 줄을 기준으로 문단 분리
-        paragraphs = text.split('\n\n')
-        
-        for paragraph in paragraphs:
-            paragraph = paragraph.strip()
-            if not paragraph:  # 빈 문단 건너뛰기
-                continue
-                
-            # 특수 마커 처리
-            if paragraph in ['<그림>', '<표>']:
-                continue
-                
-            # 제목이 없는 경우 처리
-            if not self.has_title:
-                self.add_heading(paragraph)
-                self.has_title = True
-                continue
+        # ** 문자 제거
+        text = text.replace('**', '')
             
-            # 제목으로 시작하는 경우 처리
-            if paragraph.startswith('제'):
-                self.add_heading(paragraph)
-                continue
-            
-            # 긴 문단 처리
-            if len(paragraph) > 60:
-                for sentence in self._split_long_text(paragraph):
-                    if sentence.strip():
-                        self.elements.append(('paragraph', sentence.strip(), False))
-            else:
-                self.elements.append(('paragraph', paragraph, False))
-            
-            # 문단 사이에 빈 줄 추가
-            self.elements.append(('paragraph', '', False))
+        # 긴 문단 처리
+        if len(text) > 60:
+            for sentence in self._split_long_text(text):
+                if sentence.strip():
+                    self.elements.append(('paragraph', sentence.strip(), False, {'char_pr_id': "0", 'line_spacing': '120'}))
+        else:
+            self.elements.append(('paragraph', text, False, {'char_pr_id': "0", 'line_spacing': '120'}))
 
     def add_page_break(self):
         """
         빈 문단과 함께 페이지 넘김을 추가합니다.
         """
-        self.elements.append(('paragraph', '', True))
+        self.elements.append(('paragraph', '', True, {'char_pr_id': "0"}))
 
     def add_image(self, image):
         """Add an image to the document.
@@ -680,17 +581,11 @@ class HWPDocument:
         
         try:
             temp_img = None
+            img_obj = None
             
             # Check if input is PIL Image
             if hasattr(image, 'mode') and hasattr(image, 'save'):
-                # Handle PIL Image
                 img_obj = convert_image_to_rgb(image)
-                
-                # Save to temporary file
-                temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                os.close(temp_fd)
-                img_obj.save(temp_img, 'JPEG', quality=95)
-                self._temp_files.append(temp_img)
                 
             # Check if input is bytes
             elif isinstance(image, bytes):
@@ -698,19 +593,14 @@ class HWPDocument:
                     # Handle binary data
                     img_obj = Image.open(io.BytesIO(image))
                     img_obj = convert_image_to_rgb(img_obj)
-                    
-                    # Save to temporary file
-                    temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                    os.close(temp_fd)
-                    img_obj.save(temp_img, 'JPEG', quality=95)
-                    self._temp_files.append(temp_img)
                 except:
                     # SVG 처리 시도
                     try:
                         temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
                         os.close(temp_fd)
                         cairosvg.svg2png(bytestring=image, write_to=temp_img)
-                        self._temp_files.append(temp_img)
+                        img_obj = Image.open(temp_img)
+                        img_obj = convert_image_to_rgb(img_obj)
                     except Exception as svg_error:
                         print(f"[WARNING] SVG 처리 실패: {str(svg_error)}")
                         return
@@ -720,11 +610,11 @@ class HWPDocument:
                 # SVG URL인 경우 처리
                 if image.lower().endswith('.svg'):
                     try:
-                        # SVG를 PNG로 변환
                         temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
                         os.close(temp_fd)
                         cairosvg.svg2png(url=image, write_to=temp_img)
-                        self._temp_files.append(temp_img)
+                        img_obj = Image.open(temp_img)
+                        img_obj = convert_image_to_rgb(img_obj)
                     except Exception as svg_error:
                         print(f"[WARNING] SVG URL 처리 실패: {str(svg_error)}")
                         return
@@ -737,12 +627,6 @@ class HWPDocument:
                     # Convert to PIL Image
                     img_obj = Image.open(io.BytesIO(img_data))
                     img_obj = convert_image_to_rgb(img_obj)
-                    
-                    # Save to temporary file
-                    temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                    os.close(temp_fd)
-                    img_obj.save(temp_img, 'JPEG', quality=95)
-                    self._temp_files.append(temp_img)
                 
             # Handle local file path
             elif isinstance(image, str):
@@ -752,7 +636,8 @@ class HWPDocument:
                         temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
                         os.close(temp_fd)
                         cairosvg.svg2png(url=image, write_to=temp_img)
-                        self._temp_files.append(temp_img)
+                        img_obj = Image.open(temp_img)
+                        img_obj = convert_image_to_rgb(img_obj)
                     except Exception as svg_error:
                         print(f"[WARNING] SVG 파일 처리 실패: {str(svg_error)}")
                         return
@@ -794,7 +679,6 @@ class HWPDocument:
                                 tried_paths.add(full_path)
                     
                     # Try each path
-                    temp_img = None
                     paths_tried = []
                     
                     for path, desc in possible_paths:
@@ -803,24 +687,36 @@ class HWPDocument:
                             # 이미지를 열고 RGB로 변환
                             img_obj = Image.open(path)
                             img_obj = convert_image_to_rgb(img_obj)
-                            
-                            # 임시 파일로 저장
-                            temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                            os.close(temp_fd)
-                            img_obj.save(temp_img, 'JPEG', quality=95)
-                            self._temp_files.append(temp_img)
                             break
                     
-                    if temp_img is None:
+                    if img_obj is None:
                         raise FileNotFoundError("이미지 파일을 찾을 수 없습니다: %s\n시도한 경로들:\n%s" % 
                                              (image, "\n".join(f"- {p}" for p in paths_tried)))
             
             else:
                 raise ValueError("Unsupported image type. Must be file path, URL, bytes, or PIL Image")
             
-            # Add image to document
+            # 이미지 크기 조정 및 저장
+            if img_obj:
+                img_obj = self._resize_image_to_page_width(img_obj)
+                temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
+                os.close(temp_fd)
+                img_obj.save(temp_img, 'JPEG', quality=95)
+                self._temp_files.append(temp_img)
+            
+            # 이미지 추가 전에 빈 줄 추가
+            self.elements.append(('paragraph', '', False, {'char_pr_id': "0"}))
+            
+            # 이미지 추가
             if temp_img and os.path.exists(temp_img):
-                self.elements.append(('image', temp_img, False))
+                self.elements.append(('image', temp_img, False, {}))
+            
+            # 이미지 추가 후에 빈 줄 추가
+            self.elements.append(('paragraph', '', False, {'char_pr_id': "0"}))
+            
+            # 이미지 크기가 큰 경우 페이지 나누기 추가
+            if img_obj and (img_obj.size[1] > 400):  # 이미지 높이가 400픽셀 이상인 경우
+                self.elements.append(('paragraph', '', True, {'char_pr_id': "0"}))
             
         except Exception as e:
             if temp_img and temp_img not in self._temp_files:
@@ -851,29 +747,179 @@ class HWPDocument:
         if len(row_lengths) != 1:
             raise ValueError("모든 행의 길이가 동일해야 합니다.")
         
-        self.elements.append(('table', table_data, page_break))
+        self.elements.append(('table', table_data, page_break, {}))
+
+    def _resize_image_to_page_width(self, img_obj):
+        """이미지를 페이지 너비에 맞게 크기 조정합니다.
+        
+        Args:
+            img_obj: PIL Image 객체
+            
+        Returns:
+            PIL Image: 크기가 조정된 이미지 객체
+        """
+        # A4 페이지 크기 (mm)
+        A4_WIDTH_MM = 210
+        A4_HEIGHT_MM = 297
+        
+        # 여백을 제외한 실제 사용 가능한 너비 (페이지 너비의 80%)
+        TARGET_WIDTH_MM = A4_WIDTH_MM * 0.8
+        
+        # HWP의 기본 해상도는 72 DPI
+        MM_TO_PIXELS = 72 / 25.4  # 1mm = 72/25.4 pixels
+        
+        # 목표 너비 (픽셀)
+        target_width = int(TARGET_WIDTH_MM * MM_TO_PIXELS)
+        
+        # 현재 이미지 크기
+        current_width, current_height = img_obj.size
+        
+        # 비율 계산
+        ratio = target_width / current_width
+        target_height = int(current_height * ratio)
+        
+        # 이미지 크기 조정
+        return img_obj.resize((target_width, target_height), Image.Resampling.LANCZOS)
 
     def save(self, output_path):
         """Save the document and cleanup temporary files."""
         try:
+            # 디버깅을 위한 로그 추가
+            # print("[DEBUG] Elements to save:")
+            for element in self.elements:
+                if element[0] == 'heading':
+                    # print(f"[DEBUG] Heading: '{element[1]}' with style: {element[3].get('size', 'default')}")
+                    pass
+
+            # 제목이 없는 경우 자동으로 빈 제목 추가
+            if not self.has_title:
+                self.elements.insert(0, ('heading', "", False, {'size': '8'}))
+                self.has_title = True
+
             with tempfile.TemporaryDirectory() as temp_dir:
                 # 템플릿 파일 압축 해제
                 with zipfile.ZipFile(self.template_path, 'r') as template_zip:
                     template_zip.extractall(temp_dir)
 
-                # header.xml 파일 수정 (기존 코드 유지)
+                # header.xml 파일 수정
                 header_path = os.path.join(temp_dir, 'Contents', 'header.xml')
                 with open(header_path, 'r', encoding='utf-8') as f:
                     header_content = f.read()
+                    # print(f"[DEBUG] Original header.xml content: {header_content[:500]}...")  # 처음 500자만 출력
 
-                # charProperties 섹션 찾기 및 수정 (기존 코드 유지)
+                # XML 선언과 네임스페이스 선언 확인
+                if '<?xml' not in header_content:
+                    header_content = '<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>\n' + header_content
+
+                # 스타일 정의 찾기
+                style_start = header_content.find('<hh:style')
+                style_end = header_content.find('</hh:style>')
+                
+                # 스타일 섹션 정의
+                styles = '''<hh:style itemCnt="9">
+                    <hh:stylePr id="0" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" type="PARA" name="바탕글" engName="Normal" />
+                    <hh:stylePr id="1" paraPrIDRef="1" charPrIDRef="1" nextStyleIDRef="1" type="PARA" name="본문" engName="Body" />
+                    <hh:stylePr id="2" paraPrIDRef="2" charPrIDRef="2" nextStyleIDRef="2" type="PARA" name="개요2" engName="Outline2" />
+                    <hh:stylePr id="3" paraPrIDRef="3" charPrIDRef="3" nextStyleIDRef="3" type="PARA" name="개요3" engName="Outline3" />
+                    <hh:stylePr id="4" paraPrIDRef="4" charPrIDRef="4" nextStyleIDRef="4" type="PARA" name="개요4" engName="Outline4" />
+                    <hh:stylePr id="5" paraPrIDRef="5" charPrIDRef="5" nextStyleIDRef="5" type="PARA" name="개요5" engName="Outline5" />
+                    <hh:stylePr id="6" paraPrIDRef="6" charPrIDRef="6" nextStyleIDRef="6" type="PARA" name="개요6" engName="Outline6" />
+                    <hh:stylePr id="7" paraPrIDRef="7" charPrIDRef="7" nextStyleIDRef="7" type="PARA" name="개요7" engName="Outline7" />
+                    <hh:stylePr id="8" paraPrIDRef="8" charPrIDRef="8" nextStyleIDRef="8" type="PARA" name="제목" engName="Title" />
+                </hh:style>'''
+
+                if style_start == -1 or style_end == -1:
+                    # 스타일 섹션이 없으면 새로 추가
+                    head_end = header_content.find('</hh:head>')
+                    if head_end == -1:
+                        raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
+                    
+                    # 스타일 섹션을 </hh:head> 바로 앞에 추가
+                    header_content = header_content[:head_end] + styles + header_content[head_end:]
+                else:
+                    # 기존 스타일 섹션 교체
+                    header_content = header_content[:style_start] + styles + header_content[style_end + len('</hh:style>'):]
+
+                # 수정된 header.xml 저장
+                with open(header_path, 'w', encoding='utf-8') as f:
+                    f.write(header_content)
+                    # print("[DEBUG] Updated header.xml with styles")
+
+                # 문단 모양 정의 추가
+                para_pr_start = header_content.find('<hh:paraProperties')
+                para_pr_end = header_content.find('</hh:paraProperties>')
+                if para_pr_start == -1 or para_pr_end == -1:
+                    raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
+
+                # 새로운 문단 모양 정의
+                para_properties = '''<hh:paraProperties itemCnt="10">
+                    <hh:paraPr id="0" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="1" tabPrIDRef="1" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="2" tabPrIDRef="2" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="3" tabPrIDRef="3" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="4" tabPrIDRef="4" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="5" tabPrIDRef="5" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="6" tabPrIDRef="6" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="7" tabPrIDRef="7" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="8" tabPrIDRef="8" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="9" tabPrIDRef="9" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                </hh:paraProperties>'''
+
+                # 문단 모양 섹션 전체 교체
+                header_content = (
+                    header_content[:para_pr_start] + 
+                    para_properties +
+                    header_content[para_pr_end + len('</hh:paraProperties>'):]
+                )
+
+                # 글자 모양 정의 추가
                 char_props_start = header_content.find('<hh:charProperties')
                 char_props_end = header_content.find('</hh:charProperties>')
                 
                 if char_props_start == -1 or char_props_end == -1:
                     raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
 
-                # 새로운 글자 모양 정의 (기존 코드 유지)
+                # 새로운 글자 모양 정의
                 char_props = '''<hh:charProperties itemCnt="9">
                     <hh:charPr id="0" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="2" latin="2" hanja="2" japanese="2" other="2" symbol="2" user="2"/>
@@ -896,42 +942,43 @@ class HWPDocument:
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="3" height="900" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
-                        <hh:fontRef hangul="2" latin="2" hanja="2" japanese="2" other="2" symbol="2" user="2"/>
+                    <hh:charPr id="3" height="1400" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
                     </hh:charPr>
-                    <hh:charPr id="4" height="900" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="4" height="1400" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="-5" latin="-5" hanja="-5" japanese="-5" other="-5" symbol="-5" user="-5"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="5" height="1600" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="5" height="1200" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="6" height="1100" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="6" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="7" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="7" height="900" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="8" height="1400" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="8" height="800" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
@@ -1052,38 +1099,73 @@ class HWPDocument:
                 new_body = header
                 
                 # 요소 순서대로 처리
-                for element_type, content_data, page_break, *extra in self.elements:  # *extra로 추가 매개변수 처리
+                for element in self.elements:
+                    element_type = element[0]
+                    content_data = element[1]
+                    page_break = element[2]
+                    extra = element[3] if len(element) > 3 else {}
+                    
                     if element_type == 'paragraph':
-                        char_pr_id = extra[0] if extra else "0"  # extra가 있으면 첫 번째 값 사용, 없으면 기본값 "0"
-                        paragraph_xml = f'''
-                        <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
-                            <hp:pPr>
-                                <hp:margin left="0" right="0" prev="0" next="850"/>
-                            </hp:pPr>
-                            <hp:run charPrIDRef="{char_pr_id}">
-                                <hp:t>{content_data}</hp:t>
-                            </hp:run>
-                            <hp:linesegarray>
-                                <hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" 
-                                           baseline="850" spacing="1000" horzpos="0" horzsize="42520" 
-                                           flags="393216"/>
-                            </hp:linesegarray>
-                        </hp:p>'''
-                        new_body += paragraph_xml
+                        char_pr_id = extra.get('char_pr_id', "0")
+                        # 각 줄을 별도의 문단으로 처리
+                        if content_data:
+                            for line in content_data.split('\n'):
+                                paragraph_xml = f'''
+                                <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
+                                    <hp:pPr>
+                                        <hp:margin left="0" right="0" prev="200" next="200"/>
+                                        <hp:lineSpacing type="PERCENT" value="120"/>
+                                        <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
+                                        <hp:align horizontal="JUSTIFY"/>
+                                    </hp:pPr>
+                                    <hp:run charPrIDRef="{char_pr_id}">
+                                        <hp:t>{line}</hp:t>
+                                    </hp:run>
+                                    <hp:linesegarray>
+                                        <hp:lineseg textpos="0" vertpos="0" vertsize="1600" textheight="1600" 
+                                                   baseline="1360" spacing="1600" horzpos="0" horzsize="42520" 
+                                                   flags="1441792"/>
+                                    </hp:linesegarray>
+                                </hp:p>'''
+                                new_body += paragraph_xml
+                        else:
+                            # 빈 문단 처리
+                            paragraph_xml = f'''
+                            <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
+                                <hp:pPr>
+                                    <hp:margin left="0" right="0" prev="200" next="200"/>
+                                    <hp:lineSpacing type="PERCENT" value="120"/>
+                                    <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
+                                    <hp:align horizontal="JUSTIFY"/>
+                                </hp:pPr>
+                                <hp:run charPrIDRef="{char_pr_id}">
+                                    <hp:t></hp:t>
+                                </hp:run>
+                                <hp:linesegarray>
+                                    <hp:lineseg textpos="0" vertpos="0" vertsize="1600" textheight="1600" 
+                                               baseline="1360" spacing="1600" horzpos="0" horzsize="42520" 
+                                               flags="1441792"/>
+                                </hp:linesegarray>
+                            </hp:p>'''
+                            new_body += paragraph_xml
                     
                     elif element_type == 'heading':
-                        # 제목 문단 추가
+                        heading_style = extra.get('size', "8")
+                        # print(f"[DEBUG] Processing heading: '{content_data}' with style: {heading_style}")
                         heading_xml = f'''
-                        <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
+                        <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="{heading_style}">
                             <hp:pPr>
-                                <hp:margin left="0" right="0" prev="850" next="850"/>
+                                <hp:margin left="0" right="0" prev="425" next="425"/>
+                                <hp:lineSpacing type="PERCENT" value="160"/>
+                                <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
+                                <hp:align horizontal="JUSTIFY"/>
                             </hp:pPr>
-                            <hp:run charPrIDRef="8">
+                            <hp:run charPrIDRef="{heading_style}">
                                 <hp:t>{content_data}</hp:t>
                             </hp:run>
                             <hp:linesegarray>
-                                <hp:lineseg textpos="0" vertpos="1600" vertsize="1400" textheight="1400" 
-                                           baseline="1190" spacing="840" horzpos="0" horzsize="42520" 
+                                <hp:lineseg textpos="0" vertpos="0" vertsize="2000" textheight="2000" 
+                                           baseline="1700" spacing="2000" horzpos="0" horzsize="42520" 
                                            flags="393216"/>
                             </hp:linesegarray>
                         </hp:p>'''
@@ -1093,6 +1175,11 @@ class HWPDocument:
                         # 이미지 처리
                         image_count += 1
                         image_path = content_data
+                        
+                        # 이미지 크기 설정 (extra에서 가져오거나 기본값 사용)
+                        img_options = extra if extra else {}
+                        custom_width = img_options.get('width', 41550)  # 기본값: A4 용지 너비에 맞춤
+                        custom_height = img_options.get('height', 0)
                         
                         # 이미지 파일 복사 및 변환
                         img = Image.open(image_path)
@@ -1114,8 +1201,8 @@ class HWPDocument:
 
                         # 이미지 크기 계산 (A4 용지 기준 적절한 크기로 조정)
                         img_width, img_height = img.size
-                        width = 41550  # A4 용지 너비에 맞춤
-                        height = int(width * (img_height / img_width))
+                        width = custom_width if custom_width else 41550  # A4 용지 너비에 맞춤
+                        height = custom_height if custom_height else int(width * (img_height / img_width))
 
                         # content.hpf에 이미지 항목 추가
                         media_type = f"image/{ext[1:].lower()}"
@@ -1128,7 +1215,7 @@ class HWPDocument:
                         image_xml = f'''
                         <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
                             <hp:pPr>
-                                <hp:margin left="0" right="0" prev="850" next="850"/>
+                                <hp:margin left="0" right="0" prev="200" next="200"/>
                             </hp:pPr>
                             <hp:run charPrIDRef="7">
                                 <hp:pic id="{1000000 + image_count}" zOrder="{image_count}" 
@@ -1253,7 +1340,7 @@ class HWPDocument:
 
                 # Preview/PrvText.txt 수정
                 preview_text = '\n'.join(
-                    content_data for type_, content_data, _ in self.elements 
+                    content_data for type_, content_data, _, _ in self.elements 
                     if type_ == 'paragraph' and content_data
                 )
                 preview_path = os.path.join(temp_dir, 'Preview', 'PrvText.txt')
@@ -1293,15 +1380,20 @@ class PDFDocument:
             self.margin = 50  # 여백
             self.y = self.height - self.margin  # 현재 y 위치
             
+            # 첫 페이지 자동 생성 (빈 페이지 방지)
+            self.first_page = True
+            
         except Exception as e:
             print(f"[ERROR] Failed to initialize PDF document: {str(e)}")
             raise
             
     def add_page(self):
         """Add a new page to the PDF document."""
-        self.pdf.showPage()
-        self.pdf.setFont('NotoSansKR', 10)
-        self.y = self.height - self.margin
+        if not self.first_page:  # 첫 페이지가 아닐 때만 새 페이지 추가
+            self.pdf.showPage()
+            self.pdf.setFont('NotoSansKR', 10)
+            self.y = self.height - self.margin
+        self.first_page = False  # 첫 페이지 표시 해제
         
     def add_content(self, text: str):
         """Add text content to the current page."""
@@ -1338,6 +1430,8 @@ class PDFDocument:
             
         try:
             title = title.strip()
+            if self.first_page:  # 첫 페이지면 add_page() 호출하지 않음
+                self.first_page = False
             self.pdf.setFont('NotoSansKR', 16)
             
             # 중앙 정렬을 위한 텍스트 너비 계산
@@ -1350,6 +1444,10 @@ class PDFDocument:
             self.pdf.setFont('NotoSansKR', 10)
         except Exception as e:
             print(f"[WARNING] Failed to add title: {str(e)}")
+            
+    def add_heading(self, text: str):
+        """Add a title to the current page."""
+        self.add_title(text)            
             
     def add_subtitle(self, subtitle: str):
         """Add a subtitle to the current page."""
@@ -1496,6 +1594,98 @@ class PDFDocument:
                 except:
                     pass
 
+    def add_paragraph(self, text):
+        """
+        문단을 추가합니다.
+        
+        Args:
+            text: 추가할 텍스트
+        """
+        if not text:
+            return
+            
+        try:
+            # 현재 폰트 설정 유지
+            self.pdf.setFont('NotoSansKR', 10)
+            
+            # 텍스트 줄바꿈 처리
+            max_width = self.width - (2 * self.margin)
+            lines = self._wrap_text(text, max_width)
+            
+            for line in lines:
+                # 페이지 넘김 체크
+                if self.y - 15 < self.margin:  # 15는 한 줄의 대략적인 높이
+                    self.add_page()
+                
+                self.pdf.drawString(self.margin, self.y, line)
+                self.y -= 15  # 줄간격
+                
+            self.y -= 10  # 문단 간격
+            
+        except Exception as e:
+            print(f"Error in add_paragraph: {str(e)}")
+
+    def add_table(self, data, header=None):
+        """
+        표를 추가합니다.
+        
+        Args:
+            data: 2차원 리스트 형태의 표 데이터
+            header: 헤더 행 데이터 (옵션)
+        """
+        if not data:
+            return
+            
+        try:
+            # 열 너비 계산
+            num_cols = len(data[0]) if data else 0
+            if header:
+                num_cols = max(num_cols, len(header))
+            
+            if num_cols == 0:
+                return
+                
+            col_width = (self.width - (2 * self.margin)) / num_cols
+            row_height = 20  # 기본 행 높이
+            
+            # 헤더 추가
+            if header:
+                self.pdf.setFont('NotoSansKR', 10)
+                
+                # 페이지 넘김 체크
+                if self.y - row_height < self.margin:
+                    self.add_page()
+                
+                for i, col in enumerate(header):
+                    x = self.margin + (i * col_width)
+                    self.pdf.drawString(x, self.y, str(col))
+                self.y -= row_height
+            
+            # 데이터 행 추가
+            self.pdf.setFont('NotoSansKR', 10)
+            for row in data:
+                # 페이지 넘김 체크
+                if self.y - row_height < self.margin:
+                    self.add_page()
+                    # 헤더가 있으면 새 페이지에도 헤더 추가
+                    if header:
+                        self.pdf.setFont('NotoSansKR', 10)
+                        for i, col in enumerate(header):
+                            x = self.margin + (i * col_width)
+                            self.pdf.drawString(x, self.y, str(col))
+                        self.y -= row_height
+                        self.pdf.setFont('NotoSansKR', 10)
+                
+                for i, cell in enumerate(row):
+                    x = self.margin + (i * col_width)
+                    self.pdf.drawString(x, self.y, str(cell))
+                self.y -= row_height
+            
+            self.y -= 10  # 표 아래 여백
+            
+        except Exception as e:
+            print(f"Error in add_table: {str(e)}")
+
     def save(self, filename: str):
         """Save the PDF document to a file."""
         try:
@@ -1513,6 +1703,48 @@ class PDFDocument:
             print(f"[ERROR] Failed to save PDF: {str(e)}")
             raise
 
+    def _wrap_text(self, text, max_width):
+        """
+        주어진 너비에 맞게 텍스트를 줄바꿈합니다.
+        
+        Args:
+            text: 줄바꿈할 텍스트
+            max_width: 최대 너비 (포인트 단위)
+            
+        Returns:
+            줄바꿈된 텍스트 리스트
+        """
+        if not text:
+            return []
+            
+        lines = []
+        for paragraph in text.split('\n'):
+            if not paragraph:
+                lines.append('')
+                continue
+                
+            words = paragraph.split()
+            current_line = []
+            current_width = 0
+            
+            for word in words:
+                word_width = self.pdf.stringWidth(word, 'NotoSansKR', 10)
+                space_width = self.pdf.stringWidth(' ', 'NotoSansKR', 10)
+                
+                if current_width + word_width + (space_width if current_line else 0) <= max_width:
+                    current_line.append(word)
+                    current_width += word_width + (space_width if current_line else 0)
+                else:
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                    current_line = [word]
+                    current_width = word_width
+            
+            if current_line:
+                lines.append(' '.join(current_line))
+                
+        return lines
+
 # ============================================================================
 # 파일 시스템 기본 유틸리티 (File System Core Utilities)
 # ============================================================================
@@ -1522,67 +1754,75 @@ def normalize_path(path: str) -> str:
     Normalize file path by handling spaces, special characters, and user paths.
     파일 경로의 공백, 특수문자, 사용자 경로를 처리합니다.
     """
-    # print("\n[DEBUG] normalize_path 시작")
-    # print(f"[DEBUG] 입력된 경로: '{path}'")
-    
-    # Expand user path (~/...)
-    expanded_path = os.path.expanduser(path)
-    # print(f"[DEBUG] 확장된 경로: '{expanded_path}'")
-    
-    # Handle spaces and special characters
-    parts = expanded_path.split('/')
-    # print(f"[DEBUG] 경로 분할: {parts}")
-    
-    normalized_parts = []
-    for part in parts:
-        if part:  # Skip empty parts
-            # print(f"[DEBUG] 처리 전 부분: '{part}'")
-            # Escape spaces and special characters
-            escaped_part = part.replace(" ", "\\ ").replace("(", "\\(").replace(")", "\\)")
-            # print(f"[DEBUG] 처리 후 부분: '{escaped_part}'")
-            normalized_parts.append(escaped_part)
-    
-    final_path = "/" + "/".join(normalized_parts)
-    # print(f"[DEBUG] 최종 경로: '{final_path}'")
-    
-    return final_path
+    try:
+        # Expand user path (~/...)
+        expanded_path = os.path.expanduser(path)
+        
+        # Convert to absolute path
+        abs_path = os.path.abspath(expanded_path)
+        
+        # Windows 경로 특수 처리
+        if os.name == 'nt':
+            # UNC 경로 처리 (네트워크 경로)
+            if abs_path.startswith('\\\\'):
+                return abs_path
+            # 긴 경로 처리 (260자 제한 우회)
+            if not abs_path.startswith('\\\\?\\'):
+                if len(abs_path) >= 260:
+                    abs_path = '\\\\?\\' + abs_path
+        
+        return abs_path
+        
+    except Exception as e:
+        print("[ERROR] Path normalization failed: %s" % str(e))
+        raise
 
 def safe_path_join(*paths: str) -> str:
     """
-    Safely join path components, escaping special characters.
-    안전하게 경로를 결합하고 특수문자를 이스케이프 처리합니다.
+    Safely join path components.
+    안전하게 경로를 결합합니다.
         
-        Args:
+    Args:
         *paths: Path components to join
                 결합할 경로들
         
     Returns:
-        str: Normalized and escaped joined path
-             정규화되고 이스케이프된 결합 경로
+        str: Normalized joined path
+             정규화된 결합 경로
     """
-    # print("\n[DEBUG] safe_path_join 시작")
-    # print(f"[DEBUG] 입력된 경로들: {paths}")
-    
-    # 경로 컴포넌트 처리
-    processed_paths = []
-    for path in paths:
-        path_str = str(path)
-        # print(f"[DEBUG] 처리 전 경로: '{path_str}'")
-        
-        # 홈 디렉토리 처리
-        if path_str.startswith('~'):
-            path_str = os.path.expanduser(path_str)
-            # print(f"[DEBUG] 홈 디렉토리 확장: '{path_str}'")
+    try:
+        processed_paths = []
+        for path in paths:
+            path_str = str(path)
             
-        processed_paths.append(path_str)
-    
-    # print(f"[DEBUG] 처리된 경로들: {processed_paths}")
-    
-    # 경로 결합
-    final_path = os.path.join(*processed_paths)
-    # print(f"[DEBUG] 최종 경로: '{final_path}'")
-    
-    return final_path
+            # 홈 디렉토리 처리
+            if path_str.startswith('~'):
+                path_str = os.path.expanduser(path_str)
+            
+            # Windows 경로 구분자 정규화
+            if os.name == 'nt':
+                path_str = path_str.replace('/', '\\')
+                
+            processed_paths.append(path_str)
+        
+        # 경로 결합 및 정규화
+        joined_path = os.path.join(*processed_paths)
+        normalized_path = os.path.normpath(joined_path)
+        
+        # 절대 경로로 변환
+        if not os.path.isabs(normalized_path):
+            normalized_path = os.path.abspath(normalized_path)
+            
+        # Windows 긴 경로 처리
+        if os.name == 'nt' and len(normalized_path) >= 260:
+            if not normalized_path.startswith('\\\\?\\'):
+                normalized_path = '\\\\?\\' + normalized_path
+            
+        return normalized_path
+        
+    except Exception as e:
+        print("[ERROR] Path join failed: %s" % str(e))
+        raise
 
 def list_directory(path: str) -> List[str]:
     """
@@ -1610,27 +1850,38 @@ def read_file(path: str) -> Union[str, pd.DataFrame, bytes]:
     Read and return the contents of a file based on its extension.
     파일 확장자에 따라 내용을 읽어 반환합니다.
     """
-    # print(f"\n[INFO] Reading file: {path}")
     file_ext = os.path.splitext(path)[1].lower()
     
     try:
         # Convert to raw path
         raw_path = os.path.expanduser(path)
-        # print(f"[DEBUG] Raw path: '{raw_path}'")
         
         if not os.path.exists(raw_path):
-            # print(f"[ERROR] File not found: {raw_path}")
+            print(f"[ERROR] File not found: {raw_path}")
             raise FileNotFoundError(f"File not found: {raw_path}")
 
         # Office 문서, PDF, HWP 처리
-        if file_ext in ['.doc', '.docx']:
-            return extract_from_doc(raw_path)
-        elif file_ext in ['.ppt', '.pptx']:
-            return extract_from_ppt(raw_path)
-        elif file_ext == '.pdf':
-            return extract_from_pdf(raw_path)
-        elif file_ext in ['.hwp', '.hwpx']:
-            return convert_hwp_to_text(raw_path)
+        try:
+            if file_ext in ['.doc', '.docx']:
+                return extract_from_doc(raw_path)
+            elif file_ext in ['.ppt', '.pptx']:
+                return extract_from_ppt(raw_path)
+            elif file_ext == '.pdf':
+                return extract_from_pdf(raw_path)
+            elif file_ext in ['.hwp', '.hwpx']:
+                return extract_from_hwp(raw_path)
+        except Exception as e:
+            if "hwp5txt is not installed" in str(e):
+                print("[ERROR] hwp5txt is not installed. Please install it using 'pip install --user pyhwp'")
+                raise
+            elif "Not a valid HWP file or file is corrupted" in str(e):
+                print("[ERROR] Invalid or corrupted HWP file: %s" % raw_path)
+                raise
+            elif "Failed to convert file" in str(e):
+                # print("[ERROR] Failed to convert document: %s" % raw_path)
+                return None
+            else:
+                raise
 
         # Pandas-supported files
         PANDAS_EXTENSIONS = {
@@ -1651,15 +1902,21 @@ def read_file(path: str) -> Union[str, pd.DataFrame, bytes]:
         }
         
         if file_ext in PANDAS_EXTENSIONS:
-            # print(f"[INFO] Detected pandas-supported file ({file_ext})")
-            return pd.read_excel(raw_path)
+            try:
+                return PANDAS_EXTENSIONS[file_ext](raw_path)
+            except Exception as e:
+                print(f"[ERROR] Failed to read {file_ext} file: {str(e)}")
+                raise
                     
         # Text files
         TEXT_EXTENSIONS = ['.txt', '.log', '.yaml', '.yml', '.md', '.cfg', '.conf']
         if file_ext in TEXT_EXTENSIONS:
-            # print("[INFO] Detected text file")
-            with open(raw_path, 'r', encoding='utf-8') as f:
-                return f.read()
+            try:
+                with open(raw_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception as e:
+                print(f"[ERROR] Failed to read text file: {str(e)}")
+                raise
                 
         # Binary files
         BINARY_EXTENSIONS = [
@@ -1674,17 +1931,14 @@ def read_file(path: str) -> Union[str, pd.DataFrame, bytes]:
         ]
         
         if file_ext in BINARY_EXTENSIONS:
-            # print(f"[INFO] Detected binary file ({file_ext})")
             with open(raw_path, 'rb') as f:
                 return f.read()
                 
         # Unknown files
-        # print("[WARNING] Unknown file type, attempting to read as text")
         try:
             with open(raw_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except UnicodeDecodeError:
-            # print("[INFO] File is binary, reading as bytes")
             with open(raw_path, 'rb') as f:
                 return f.read()
                 
@@ -1703,87 +1957,25 @@ def write_file(path: str, content: Union[str, pd.DataFrame, bytes], mode: str = 
         mode (str, optional): File open mode ('w', 'a', 'wb', 'ab'). Defaults to 'w'
         encoding (str, optional): Text encoding. Defaults to 'utf-8'
     """
-    file_ext = os.path.splitext(path)[1].lower()
-    
     try:
         raw_path = os.path.expanduser(path)
         
         directory = os.path.dirname(raw_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
-        
-        # HWPX 파일 처리
-        if file_ext == '.hwpx':
-            doc = HWPDocument()
-            # 파일명을 제목으로 사용
-            title = os.path.splitext(os.path.basename(raw_path))[0]
-            # doc.add_heading("title")
-            doc.add_heading("")
-            
-            if isinstance(content, str):
-                doc.add_text_content(content)
-            elif isinstance(content, pd.DataFrame):
-                doc.add_table(data=content.values.tolist(), header=content.columns.tolist())
-            else:
-                raise ValueError("HWPX 파일 생성을 위해서는 문자열이나 DataFrame 형식의 데이터가 필요합니다.")
-            doc.save(raw_path)
-            return
-
-        # PDF 파일 처리
-        if file_ext == '.pdf':
-            doc = PDFDocument()
-            if isinstance(content, str):
-                doc.add_content(content)
-            elif isinstance(content, pd.DataFrame):
-                # DataFrame을 텍스트 테이블 형식으로 변환
-                table_str = content.to_string()
-                doc.add_content(table_str)
-            else:
-                raise ValueError("PDF 파일 생성을 위해서는 문자열이나 DataFrame 형식의 데이터가 필요합니다.")
-            doc.save(raw_path)
-            return
             
         # DataFrame to text for .txt files
-        if isinstance(content, pd.DataFrame) and file_ext == '.txt':
+        if isinstance(content, pd.DataFrame):
             content = content.to_string()
-        
-        # PDF 추출 텍스트 처리
-        if isinstance(content, str) and file_ext == '.txt':
-            # 인코딩 감지
-            try:
-                import chardet
-                if not content.isprintable():  # 비인쇄 문자가 포함된 경우
-                    encoding_detect = chardet.detect(content.encode())
-                    detected_encoding = encoding_detect['encoding']
-                    if detected_encoding and detected_encoding.lower() != 'utf-8':
-                        content = content.encode(detected_encoding).decode('utf-8', errors='ignore')
-            except ImportError:
-                pass  # chardet가 없는 경우 기본 처리 사용
             
-            # 비인쇄 문자 제거
-            content = ''.join(char for char in content if char.isprintable() or char in ['\n', '\t', ' '])
-        
-        # Text content
-        if isinstance(content, str):
-            # 'wb' 또는 'ab' 모드인 경우 encoding 매개변수 제외
-            if 'b' in mode:
-                with open(raw_path, mode) as f:
-                    f.write(content.encode(encoding))
-            else:
-                with open(raw_path, mode, encoding=encoding) as f:
-                    f.write(content)
-            return
-            
-        # Binary content
+        # Write content based on type
         if isinstance(content, bytes):
-            # 바이너리 모드가 아닌 경우 'b' 추가
-            binary_mode = mode if 'b' in mode else mode + 'b'
-            with open(raw_path, binary_mode) as f:
+            with open(raw_path, 'wb' if 'b' not in mode else mode) as f:
                 f.write(content)
-            return
-            
-        raise ValueError(f"Unsupported content type: {type(content)}")
-        
+        else:
+            with open(raw_path, mode, encoding=encoding) as f:
+                f.write(str(content))
+                
     except Exception as e:
         print(f"[ERROR] Failed to write file: {str(e)}")
         raise
@@ -1963,7 +2155,238 @@ def is_package_installed(package_name: str) -> bool:
 # 문서 변환 유틸리티 (Document Conversion Utilities)
 # ============================================================================
 
-def convert_hwp_to_text(hwp_path: str) -> str:
+def extract_from_hwp_hwp2html(hwp_path: str) -> str:
+    """
+    HWP/HWPX 파일에서 텍스트를 추출합니다 (hwp5html 사용).
+    """
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+        import platform
+        import subprocess
+        import tempfile
+        import os
+        from bs4 import BeautifulSoup
+        import glob
+        import olefile
+        
+        # 파일 존재 여부 확인
+        if not os.path.exists(hwp_path):
+            print("[WARNING] File not found: %s" % hwp_path)
+            return ""
+            
+        print("\nExtracting text from: %s" % hwp_path)
+        
+        # 파일 형식 확인
+        is_hwpx = False
+        is_hwp = False
+        
+        try:
+            # HWPX 확인 (ZIP 파일 형식)
+            try:
+                with zipfile.ZipFile(hwp_path) as zf:
+                    if 'Contents/section0.xml' in zf.namelist():
+                        is_hwpx = True
+            except zipfile.BadZipFile:
+                pass
+                
+            # HWP 확인 (OLE2 파일 형식)
+            if not is_hwpx:
+                try:
+                    with olefile.OleFileIO(hwp_path) as ole:
+                        if ole.exists('FileHeader'):
+                            is_hwp = True
+                except:
+                    pass
+                    
+        except Exception as e:
+            print("[WARNING] Failed to check file format: %s" % str(e))
+            return ""
+            
+        if not (is_hwpx or is_hwp):
+            print("[WARNING] Unsupported file format: %s" % hwp_path)
+            return ""
+            
+        if is_hwpx:
+            try:
+                with zipfile.ZipFile(hwp_path) as zf:
+                    # section0.xml 파싱
+                    with zf.open('Contents/section0.xml') as f:
+                        content = f.read().decode('utf-8')
+                        
+                        # XML 파싱
+                        root = ET.fromstring(content)
+                        
+                        # 네임스페이스 정의
+                        ns = {
+                            'hp': 'http://www.hancom.co.kr/hwpml/2011/paragraph',
+                            'hc': 'http://www.hancom.co.kr/hwpml/2011/core',
+                            'ha': 'http://www.hancom.co.kr/hwpml/2011/app',
+                            'hs': 'http://www.hancom.co.kr/hwpml/2011/section'
+                        }
+                        
+                        text_parts = []
+                        
+                        # 1. 문단(p) 처리
+                        for para in root.findall('.//hp:p', ns):
+                            para_text = []
+                            
+                            # 1.1 일반 텍스트(t)
+                            for run in para.findall('.//hp:run', ns):
+                                for t in run.findall('.//hp:t', ns):
+                                    if t.text:
+                                        para_text.append(t.text)
+                            
+                            # 1.2 표 처리
+                            for tbl in para.findall('.//hp:tbl', ns):
+                                for tc in tbl.findall('.//hp:tc', ns):
+                                    cell_text = []
+                                    for t in tc.findall('.//hp:t', ns):
+                                        if t.text:
+                                            cell_text.append(t.text.strip())
+                                    if cell_text:
+                                        para_text.append(' '.join(cell_text))
+                            
+                            if para_text:
+                                text_parts.append(' '.join(para_text))
+                        
+                        text = '\n'.join(text_parts)
+                        return text if text.strip() else ""
+            except Exception as e:
+                print("[WARNING] Failed to parse HWPX file: %s" % str(e))
+                return ""
+                
+        else:  # HWP
+            try:
+                # 임시 디렉토리 생성
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # hwp5html 명령어로 HTML 파일 생성
+                    output_dir = os.path.join(temp_dir, 'output')
+                    os.makedirs(output_dir, exist_ok=True)
+                    cmd = ['hwp5html', '--output', output_dir, hwp_path]
+                    
+                    try:
+                        # UTF-8 인코딩으로 출력 설정
+                        env = os.environ.copy()
+                        env['PYTHONIOENCODING'] = 'utf-8'
+                        
+                        # 명령어 실행
+                        result = subprocess.run(cmd, 
+                                             env=env, 
+                                             capture_output=True, 
+                                             text=True, 
+                                             encoding='utf-8')
+                        
+                        if result.returncode == 0:
+                            # HTML 파일들을 순서대로 읽기
+                            text_parts = []
+                            html_files = sorted(glob.glob(os.path.join(output_dir, '*.html')))
+                            
+                            if not html_files:
+                                # PrvText 스트림에서 시도
+                                try:
+                                    with olefile.OleFileIO(hwp_path) as ole:
+                                        if ole.exists('PrvText'):
+                                            prvtext = ole.openstream('PrvText')
+                                            text = prvtext.read().decode('utf-16-le').strip()
+                                            text = text.replace('\r\n', '\n')  # 개행문자 통일
+                                            text = text.replace('\0', '')      # null 문자 제거
+                                            return text if text.strip() else ""
+                                except:
+                                    pass
+                                    
+                                print("[WARNING] No text content found in HWP file: %s" % hwp_path)
+                                return ""
+                            
+                            for html_file in html_files:
+                                # HTML 파일 읽기
+                                with open(html_file, 'r', encoding='utf-8') as f:
+                                    html_content = f.read()
+                                
+                                # BeautifulSoup으로 HTML 파싱
+                                soup = BeautifulSoup(html_content, 'html.parser')
+                                
+                                # 텍스트 추출 및 정제
+                                text = soup.get_text(separator='\n', strip=True)
+                                if text.strip():
+                                    text_parts.append(text)
+                            
+                            # 모든 텍스트 합치기
+                            text = '\n\n'.join(text_parts)
+                            text = text.replace('\r\n', '\n')  # 개행문자 통일
+                            
+                            return text if text.strip() else ""
+                        else:
+                            error_msg = result.stderr.strip()
+                            print("[WARNING] HWP 파일 변환 실패: %s" % error_msg)
+                            return ""
+                            
+                    except subprocess.SubprocessError as e:
+                        print("[WARNING] Failed to execute hwp5html: %s" % str(e))
+                        return ""
+                        
+            except Exception as e:
+                print("[WARNING] Failed to extract text from HWP file: %s" % str(e))
+                return ""
+            
+    except Exception as e:
+        print("[WARNING] Error processing document: %s" % str(e))
+        return ""
+
+def extract_from_hwp(hwp_path: str) -> str:
+    """
+    HWP/HWPX 파일에서 텍스트를 추출합니다.
+    
+    Args:
+        hwp_path: HWP 파일 경로
+        
+    Returns:
+        str: 추출된 텍스트
+    """
+    try:
+        import os
+        
+        # 1. hwp2txt 방식으로 시도
+        # print("\nAttempting to extract text using hwp2txt method...")
+        text_content = extract_from_hwp_hwp2txt(hwp_path)
+        if text_content:
+            text_content = clean_hwp_text(text_content)
+            print(f"Extracted text length (hwp2txt): {len(text_content)}")
+            sections = extract_structure(text_content)
+            return '\n\n'.join(sections)
+            
+        print("hwp2txt method failed")
+        print("Falling back to PDF conversion method")
+        
+        # 2. PDF로 변환 시도
+        # print(f"Attempting to convert HWP to PDF: {hwp_path}")
+        pdf_path = convert_hwp_to_pdf(hwp_path)
+        
+        if pdf_path and os.path.exists(pdf_path):
+            print(f"Successfully converted to PDF: {pdf_path}")
+            print("Extracting text from PDF...")
+            
+            # PDF에서 텍스트 추출
+            text_content = extract_from_pdf(pdf_path)
+            if text_content:
+                print(f"Successfully extracted text from PDF, length: {len(text_content)}")
+                text_content = clean_hwp_text(text_content)
+                print(f"Cleaned text length: {len(text_content)}")
+                
+                # 문서 구조화
+                sections = extract_structure(text_content)
+                text_content = '\n\n'.join(sections)
+                print(f"Final text length after structuring: {len(text_content)}")
+                return text_content
+        
+        print("Both extraction methods failed")
+        return ""
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to process HWP file: {str(e)}")
+        return ""
+
+def extract_from_hwp_hwp2txt(hwp_path: str) -> str:
     """
     HWP/HWPX 파일을 텍스트로 변환합니다.
     """
@@ -2022,7 +2445,9 @@ def convert_hwp_to_text(hwp_path: str) -> str:
                                 text_parts.append(' '.join(para_text))
                         
                         text = '\n'.join(text_parts)
-                        return text if text.strip() else "No text content found in the HWPX file."
+                        text = clean_hwp_text(text)
+                        sections = extract_structure(text)
+                        return '\n\n'.join(sections) if sections else "No text content found in the HWPX file."
                     
             except Exception as e:
                 raise Exception(f"Failed to process HWPX file: {str(e)}")
@@ -2049,9 +2474,15 @@ def convert_hwp_to_text(hwp_path: str) -> str:
                         # 생성된 텍스트 파일 읽기
                         if os.path.exists(temp_txt):
                             with open(temp_txt, 'r', encoding='utf-8') as f:
-                                return f.read()
+                                text = f.read()
+                                text = clean_hwp_text(text)
+                                sections = extract_structure(text)
+                                return '\n\n'.join(sections)
                         else:
-                            return result.stdout
+                            text = result.stdout
+                            text = clean_hwp_text(text)
+                            sections = extract_structure(text)
+                            return '\n\n'.join(sections)
                     except subprocess.SubprocessError as e:
                         raise Exception(f"Failed to convert HWP file: {str(e)}")
             else:
@@ -2063,7 +2494,10 @@ def convert_hwp_to_text(hwp_path: str) -> str:
                     encoding='utf-8'
                 )
                 if result.returncode == 0:
-                    return result.stdout
+                    text = result.stdout
+                    text = clean_hwp_text(text)
+                    sections = extract_structure(text)
+                    return '\n\n'.join(sections)
                 else:
                     raise Exception(result.stderr)
         else:
@@ -2072,7 +2506,8 @@ def convert_hwp_to_text(hwp_path: str) -> str:
     except subprocess.SubprocessError as e:
         raise Exception(f"Failed to convert HWP file: {str(e)}")
     except Exception as e:
-        raise Exception(f"Failed to convert file: {str(e)}")
+        # print(f"[ERROR] Failed to convert file: {str(e)}")
+        return None
 
 def extract_from_doc(doc_path: str) -> str:
     """
@@ -2691,22 +3126,71 @@ def create_matplotlib(figsize: tuple = (6, 4)) -> tuple[plt.Figure, plt.Axes, fm
     Raises:
         FileNotFoundError: 한글 폰트 파일이 없는 경우
     """
-    # 한글 폰트 설정
-    font_path = safe_path_join(os.path.expanduser("~"), ".airun", "NotoSansKR-Regular.ttf")
-    if not os.path.exists(font_path):
-        raise FileNotFoundError("Korean font file not found. Please ensure airun is properly installed.")
-    
-    # 폰트 속성 설정
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rcParams["font.family"] = font_prop.get_name()
-    fm.fontManager.addfont(font_path)
-    plt.rcParams["axes.unicode_minus"] = False
-    plt.rcParams["font.size"] = 12
-    
-    # 그래프 생성
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    return fig, ax, font_prop
+    try:
+        # 한글 폰트 설정
+        font_path = safe_path_join(os.path.expanduser("~"), ".airun", "NotoSansKR-Regular.ttf")
+        if not os.path.exists(font_path):
+            raise FileNotFoundError("Korean font file not found. Please ensure airun is properly installed.")
+        
+        # 폰트 속성 설정
+        font_prop = fm.FontProperties(fname=font_path)
+        plt.rcParams["font.family"] = font_prop.get_name()
+        fm.fontManager.addfont(font_path)
+        plt.rcParams["axes.unicode_minus"] = False
+        plt.rcParams["font.size"] = 12
+        
+        # 그래프 생성
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # 안전한 텍스트 처리를 위한 메서드 오버라이드
+        original_set_title = ax.set_title
+        original_set_xlabel = ax.set_xlabel
+        original_set_ylabel = ax.set_ylabel
+        original_legend = ax.legend
+        
+        def safe_set_title(title, **kwargs):
+            if 'fontproperties' not in kwargs:
+                kwargs['fontproperties'] = font_prop
+            return original_set_title(str(title), **kwargs)
+            
+        def safe_set_xlabel(label, **kwargs):
+            if 'fontproperties' not in kwargs:
+                kwargs['fontproperties'] = font_prop
+            return original_set_xlabel(str(label), **kwargs)
+            
+        def safe_set_ylabel(label, **kwargs):
+            if 'fontproperties' not in kwargs:
+                kwargs['fontproperties'] = font_prop
+            return original_set_ylabel(str(label), **kwargs)
+            
+        def safe_legend(*args, **kwargs):
+            if 'prop' not in kwargs:
+                kwargs['prop'] = font_prop
+            if args and isinstance(args[0], (list, tuple)):
+                args = list(args)
+                args[0] = [str(label) for label in args[0]]
+            return original_legend(*args, **kwargs)
+        
+        # 안전한 메서드로 교체
+        ax.set_title = safe_set_title
+        ax.set_xlabel = safe_set_xlabel
+        ax.set_ylabel = safe_set_ylabel
+        ax.legend = safe_legend
+        
+        # 숫자 포맷팅 헬퍼 함수 추가
+        def add_formatter(formatter_func):
+            """숫자 포맷터를 y축에 추가"""
+            import matplotlib.ticker as ticker
+            ax.yaxis.set_major_formatter(ticker.FuncFormatter(formatter_func))
+        
+        # 축에 헬퍼 함수 추가
+        ax.add_formatter = add_formatter
+        
+        return fig, ax, font_prop
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to create matplotlib figure: {str(e)}")
+        raise
 
 def save_plot(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     """
@@ -3151,7 +3635,7 @@ def search_content(path: str, query: str, file_types: List[str] = None) -> List[
                 
                 # 한글 문서
                 elif ext in ['.hwp', '.hwpx']:
-                    text = convert_hwp_to_text(file_path)
+                    text = extract_from_hwp(file_path)
                     lines = text.split('\n')
                     for line in lines:
                         if query in line.lower():
@@ -3703,18 +4187,19 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
         from email.utils import formatdate
         import os
         
-        # SMTP 설정 가져오기
-        smtp_config = config.get_smtp_settings()
+        # SMTP_SECURE 설정 가져오기
+        config = load_config()
+        secure = config.get("SMTP_SECURE", "YES").upper() not in ["NO", "N"]
         
         print(f"\n[INFO] SMTP Settings:")
-        print(f"- Server: {smtp_config['host']}")
-        print(f"- Port: {smtp_config['port']}")
-        print(f"- Account: {smtp_config['username']}")
-        print(f"- Secure: {smtp_config['secure']}")
+        print(f"- Server: {SMTP_HOST}")
+        print(f"- Port: {SMTP_PORT}")
+        print(f"- Account: {SMTP_USERNAME}")
+        print(f"- Secure: {secure}")
         
         # 메시지 생성
         msg = MIMEMultipart('alternative')
-        msg['From'] = smtp_config['username']
+        msg['From'] = SMTP_USERNAME
         msg['To'] = to_email
         msg['Subject'] = subject
         msg['Date'] = formatdate(localtime=True)
@@ -3736,25 +4221,157 @@ def send_email(to_email: str, subject: str, body: str, attachments: List[str] = 
                             part['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
                             msg.attach(part)
                     else:
-                        print(f"[WARNING] Can't find attachment file: {file_path}")
+                        print(f"[WARNING] 첨부 파일을 찾을 수 없습니다: {file_path}")
                 except Exception as e:
-                    print(f"[WARNING] Error processing attachment file: {str(e)}")
+                    print(f"[WARNING] 첨부 파일 처리 중 오류 발생: {str(e)}")
                     continue
         
         # SMTP 서버 연결 및 이메일 발송
-        with smtplib.SMTP(smtp_config['host'], smtp_config['port']) as server:
-            if smtp_config['secure']:
-                server.starttls()  # TLS 보안 연결
-            server.login(smtp_config['username'], smtp_config['password'])
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            if secure:
+                server.starttls()  # TLS 보안 연결 (SMTP_SECURE가 true인 경우에만)
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg)
             
-        print(f"[INFO] Email sent successfully: {to_email}")
+        print(f"[INFO] 이메일이 성공적으로 발송되었습니다: {to_email}")
         return True
         
     except Exception as e:
-        print(f"[ERROR] Failed to send email: {str(e)}")
+        print(f"[ERROR] 이메일 발송 실패: {str(e)}")
         return False
 
+# ============================================================================
+# DeepL 관련 클래스와 함수 (DeepL Related Classes and Functions)
+# ============================================================================
+
+class DeepLTranslator:
+    def __init__(self):
+        self._install_required_packages()
+        
+        # 설정 파일에서 API 키 읽기
+        config = load_config()
+        self.api_key = config.get('DEEPL_API_KEY') or os.getenv('DEEPL_API_KEY')
+        
+        if not self.api_key:
+            raise ValueError("DeepL API key is required")
+        
+        # Free API 엔드포인트 사용
+        self.base_url = "https://api-free.deepl.com/v2"
+        self.max_length = 4500  # Free API 안전 제한
+
+    def _install_required_packages(self):
+        packages = ['aiohttp']
+        for package in packages:
+            install_if_missing(package)
+            
+    def _split_text(self, text: str) -> list:
+        """텍스트를 문장 단위로 분할합니다."""
+        chunks = []
+        current_chunk = []
+        current_length = 0
+        
+        # 문단 단위로 먼저 분리
+        paragraphs = text.split('\n\n')
+        
+        for paragraph in paragraphs:
+            # 문장 단위로 분리
+            sentences = paragraph.replace('. ', '.\n').replace('? ', '?\n').replace('! ', '!\n').split('\n')
+            
+            for sentence in sentences:
+                sentence = sentence.strip()
+                if not sentence:
+                    continue
+                
+                # 문장이 단독으로 제한을 초과하는 경우
+                if len(sentence) > self.max_length:
+                    # 현재 청크가 있으면 먼저 추가
+                    if current_chunk:
+                        chunks.append('\n'.join(current_chunk))
+                        current_chunk = []
+                        current_length = 0
+                    
+                    # 긴 문장을 강제로 분할
+                    while sentence:
+                        chunks.append(sentence[:self.max_length])
+                        sentence = sentence[self.max_length:]
+                    continue
+                
+                # 현재 청크에 문장을 추가했을 때 제한을 초과하는 경우
+                if current_length + len(sentence) > self.max_length:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = []
+                    current_length = 0
+                
+                current_chunk.append(sentence)
+                current_length += len(sentence)
+        
+        # 마지막 청크 처리
+        if current_chunk:
+            chunks.append('\n'.join(current_chunk))
+        
+        return chunks
+
+    async def translate(self, text: str, target_lang: str = 'EN', formality: str = 'default') -> dict:
+        try:
+            chunks = self._split_text(text)
+            translated_chunks = []
+            
+            headers = {
+                'Authorization': f'DeepL-Auth-Key {self.api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                for chunk in chunks:
+                    if not chunk.strip():
+                        continue
+                        
+                    params = {
+                        'text': [chunk],  # text 파라미터를 배열로 변경
+                        'target_lang': target_lang.upper(),
+                        'formality': formality
+                    }
+                    
+                    async with session.post(f"{self.base_url}/translate", 
+                                          headers=headers,
+                                          json=params) as response:
+                        if response.status == 200:
+                            result = await response.json()
+                            translated_chunks.append(result['translations'][0]['text'])
+                        else:
+                            error_text = await response.text()
+                            return {
+                                'success': False,
+                                'translated_text': '',
+                                'error': f'Translation failed: {error_text}'
+                            }
+            
+            return {
+                'success': True,
+                'translated_text': '\n'.join(translated_chunks),
+                'error': ''
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'translated_text': '',
+                'error': str(e)
+            }
+
+    async def get_supported_languages(self) -> list:
+        """지원되는 언어 목록을 반환합니다."""
+        headers = {
+            'Authorization': f'DeepL-Auth-Key {self.api_key}'
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{self.base_url}/languages", 
+                                 headers=headers) as response:
+                if response.status == 200:
+                    languages = await response.json()
+                    return languages
+                return []
+            
 # ============================================================================
 # AI 관련 클래스와 함수 (AI Related Classes and Functions)
 # ============================================================================
@@ -3995,7 +4612,7 @@ class AIProvider:
             model = self.config.get('OLLAMA_MODEL', 'llama3')
             return self.default_max_tokens['ollama'].get(model, 8192)
         return 4000  # 기본값
-
+    
 class TextProcessor(AIProvider):
     # 모델별 비율 설정을 클래스 변수로 정의
     MODEL_RATIOS = {
@@ -4051,18 +4668,18 @@ class TextProcessor(AIProvider):
             max_chunk_size = int(model_max_tokens * model_ratio['chunk'])
             max_summary_tokens = int(model_max_tokens * model_ratio['summary'])
         
-        print(f"[INFO] Current model: {current_model}")
-        print(f"[INFO] Max tokens: {model_max_tokens}")
-        print(f"[INFO] Using max chunk size of {max_chunk_size} tokens")
-        print(f"[INFO] Max summary tokens: {max_summary_tokens}")
+        # print(f"[INFO] Current model: {current_model}")
+        # print(f"[INFO] Max tokens: {model_max_tokens}")
+        # print(f"[INFO] Using max chunk size of {max_chunk_size} tokens")
+        # print(f"[INFO] Max summary tokens: {max_summary_tokens}")
         
         # 청크 크기와 요약본 토큰 수 계산
         max_chunk_size = int(model_max_tokens * model_ratio['chunk'])
         max_summary_tokens = int(model_max_tokens * model_ratio['summary'])
         
-        print(f"[INFO] Current model: {current_model}")
-        print(f"[INFO] Max tokens: {model_max_tokens}")
-        print(f"[INFO] Using max chunk size of {max_chunk_size} tokens")
+        # print(f"[INFO] Current model: {current_model}")
+        # print(f"[INFO] Max tokens: {model_max_tokens}")
+        # print(f"[INFO] Using max chunk size of {max_chunk_size} tokens")
         
         # 긴 텍스트를 의미 단위로 나누는 함수
         def split_into_semantic_chunks(text):
@@ -4527,6 +5144,266 @@ def debug_print(message: str) -> None:
     """
     print(message, file=sys.stderr)
 
+# DeepL 번역기 테스트를 위한 코드
+async def test_deepl_translator():
+    try:
+        # DeepL 번역기 초기화
+        translator = DeepLTranslator()
+        print("[DEBUG] DeepL 번역기가 성공적으로 초기화되었습니다.")
+        
+        # 테스트할 텍스트
+        test_text = "안녕하세요. 이것은 테스트 메시지입니다."
+        print(f"[DEBUG] 원본 텍스트: {test_text}")
+        
+        # 번역 실행
+        result = await translator.translate(test_text, target_lang='EN')
+        print(f"[DEBUG] 번역 결과: {result}")
+        
+        # 지원 언어 확인
+        languages = await translator.get_supported_languages()
+        print(f"[DEBUG] 지원되는 언어 목록: {languages}")
+        
+    except Exception as e:
+        print(f"[ERROR] 테스트 중 오류 발생: {str(e)}")
 
+# 테스트 실행을 위한 코드
 if __name__ == "__main__":
+    import asyncio
     import sys
+    
+    if len(sys.argv) > 3:
+        input_file = sys.argv[1]
+        output_file = sys.argv[2]
+        target_language = sys.argv[3]
+        run_translation(input_file, output_file, target_language)
+    else:
+        # 테스트 코드 실행
+        asyncio.run(test_deepl_translator())
+
+def clean_hwp_text(text):
+    """
+    HWP에서 추출된 텍스트를 정제합니다.
+    """
+    import re
+    
+    if not text:
+        return ""
+        
+    # 1. 불필요한 태그 제거
+    text = re.sub(r'<표>|<그림>', '', text)
+    
+    # 2. 특수 문자 처리
+    special_chars = {
+        '󰊱': '1.',
+        '󰊲': '2.',
+        '󰊳': '3.',
+        '󰊴': '4.',
+        '󰊵': '5.'
+    }
+    for char, replacement in special_chars.items():
+        text = text.replace(char, replacement)
+    
+    # 3. 연속된 빈 줄 제거
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # 4. 줄 시작의 불필요한 공백 제거
+    text = '\n'.join(line.strip() for line in text.split('\n'))
+    
+    # 5. 표 형식 정리 (단위: 등의 표시 처리)
+    text = re.sub(r'\(단위\s*:\s*([^)]+)\)', r'(단위: \1)', text)
+    
+    # 6. 괄호 안의 공백 정리
+    text = re.sub(r'\(\s+', '(', text)
+    text = re.sub(r'\s+\)', ')', text)
+    
+    return text.strip()
+
+def extract_structure(text):
+    """
+    텍스트에서 문서의 구조를 추출합니다.
+    """
+    import re
+    
+    if not text:
+        return []
+        
+    sections = []
+    current_section = []
+    
+    for line in text.split('\n'):
+        line = line.strip()
+        if not line:
+            if current_section:
+                current_section.append('')
+            continue
+            
+        # 제목 패턴 확인
+        is_title = bool(re.match(r'^[0-9０-９]+[\.\s]|^[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ][\.\s]', line))
+        
+        if is_title:
+            if current_section:
+                sections.append('\n'.join(current_section).strip())
+                current_section = []
+            current_section.append(line)
+        else:
+            current_section.append(line)
+    
+    if current_section:
+        sections.append('\n'.join(current_section).strip())
+    
+    return [section for section in sections if section.strip()]
+
+def convert_hwp_to_pdf(hwp_path: str) -> str:
+    """
+    HWP 파일을 PDF로 변환합니다.
+    
+    Args:
+        hwp_path (str): HWP 파일 경로
+        
+    Returns:
+        str: 변환된 PDF 파일 경로 (성공 시) 또는 빈 문자열 (실패 시)
+    """
+    try:
+        import os
+        import subprocess
+        import tempfile
+        
+        print(f"\nStarting HWP to PDF conversion: {hwp_path}")
+        
+        # LibreOffice가 설치되어 있는지 확인
+        if not is_package_installed('libreoffice'):
+            print("LibreOffice is not installed. Please install it first.")
+            return ''
+        
+        # 원본 파일과 같은 위치에 PDF 생성
+        output_dir = os.path.dirname(hwp_path)
+        original_cwd = os.getcwd()
+        
+        try:
+            # 작업 디렉토리를 출력 디렉토리로 변경
+            print(f"Changing directory to: {output_dir}")
+            os.chdir(output_dir)
+            
+            # LibreOffice로 변환 시도
+            print("Running LibreOffice conversion command...")
+            result = subprocess.run(
+                ['libreoffice', '--headless', '--convert-to', 'pdf', os.path.basename(hwp_path)],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            print(f"Conversion command output: {result.stdout}")
+            if result.stderr:
+                print(f"Conversion command error: {result.stderr}")
+            
+            if result.returncode == 0:
+                # 변환된 PDF 파일 경로
+                pdf_path = os.path.splitext(hwp_path)[0] + '.pdf'
+                if os.path.exists(pdf_path):
+                    print(f"PDF file created successfully: {pdf_path}")
+                    return pdf_path
+                else:
+                    print(f"PDF file not found at expected path: {pdf_path}")
+            else:
+                print(f"Conversion command failed with return code: {result.returncode}")
+                    
+        except subprocess.TimeoutExpired:
+            print("Conversion timed out after 30 seconds")
+        except Exception as e:
+            print(f"Conversion error: {str(e)}")
+        finally:
+            # 원래 작업 디렉토리로 복원
+            print(f"Restoring original directory: {original_cwd}")
+            os.chdir(original_cwd)
+        
+        return ''
+        
+    except Exception as e:
+        print(f"Error in convert_hwp_to_pdf: {str(e)}")
+        return ''
+
+def get_file_info(path: str) -> Dict[str, Any]:
+    """파일의 기본 정보를 조회하는 함수
+    
+    Args:
+        path: 파일 경로
+        
+    Returns:
+        파일 정보를 담은 딕셔너리:
+        - filename: 파일명
+        - modified_time: 수정일시
+        - size: 파일 크기
+        - created_time: 생성일시
+        - owner: 소유자
+        - permissions: 파일 권한
+    """
+    try:
+        # 1. 경로 정규화
+        norm_path = normalize_path(path)
+        
+        # 2. 파일 정보 조회
+        stat = os.stat(norm_path)
+        
+        # 3. 결과 반환
+        return {
+            'filename': os.path.basename(norm_path),
+            'modified_time': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+            'size': stat.st_size,
+            'created_time': datetime.fromtimestamp(stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S'),
+            'owner': stat.st_uid,
+            'permissions': oct(stat.st_mode)[-3:]
+        }
+    except Exception as e:
+        print(f"[ERROR] 파일 정보 조회 실패: {str(e)}")
+        raise
+
+def summarize_with_openai(content: str, max_length: int = None) -> str:
+    """OpenAI를 사용하여 텍스트를 요약하는 테스트 함수입니다.
+    
+    Args:
+        content (str): 요약할 텍스트 내용
+        max_length (int, optional): 최대 요약 길이. Defaults to None.
+        
+    Returns:
+        str: 요약된 텍스트
+    """
+    try:
+        from openai import OpenAI
+        import os
+        
+        # OpenAI 클라이언트 초기화
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
+            api_key = config.get('OPENAI_API_KEY')
+            if not api_key:
+                raise ValueError("OpenAI API key is not configured.")
+            os.environ['OPENAI_API_KEY'] = api_key
+            
+        client = OpenAI()  # 환경 변수에서 API 키를 자동으로 가져옴
+        
+        # 모델 설정
+        model = "gpt-3.5-turbo"
+        max_tokens = min(max_length or 4000, 4000)
+        
+        # 요약 요청
+        messages = [
+            {"role": "system", "content": "Please provide a clear and concise summary of the following text:"},
+            {"role": "system", "content": "Create the summary in Korean."},
+            {"role": "user", "content": content}
+        ]
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens
+        )
+        
+        if not response.choices:
+            raise ValueError("Empty response from OpenAI API")
+            
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        print(f"[ERROR] Summarization failed: {str(e)}")
+        raise
