@@ -18,7 +18,16 @@ impl OpenAIProvider {
         Self {
             api_key: api_key.to_string(),
             client: Client::new(),
-            context: Mutex::new(ContextWindow::new(4096)), // Start with default value
+            context: Mutex::new(ContextWindow::new(128_000)), // Updated to support max context window
+        }
+    }
+
+    fn get_max_context_length(&self, model: &str) -> usize {
+        match model {
+            "gpt-4o" | "gpt-4-0125-preview" => 128_000,
+            "gpt-4o-mini" | "gpt-4-turbo-preview" => 128_000,
+            "gpt-3.5-turbo" | "gpt-3.5-turbo-0125" => 16_384,
+            _ => 4_096, // 기본값
         }
     }
 
@@ -34,7 +43,7 @@ impl OpenAIProvider {
 #[async_trait]
 impl AIProvider for OpenAIProvider {
     async fn chat(&self, message: &str, model: Option<String>) -> Result<String> {
-        let model = model.unwrap_or_else(|| "gpt-3.5-turbo".to_string());
+        let model = model.unwrap_or_else(|| "gpt-4o-mini".to_string());
         self.update_context_window(&model);
 
         let messages = {
@@ -79,7 +88,7 @@ impl AIProvider for OpenAIProvider {
             .post("https://api.openai.com/v1/chat/completions")
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&json!({
-                "model": request.model.clone().unwrap_or_else(|| "gpt-4".to_string()),
+                "model": request.model.clone().unwrap_or_else(|| "gpt-4o-mini".to_string()),
                 "messages": [
                     {
                         "role": "system",

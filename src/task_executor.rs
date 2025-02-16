@@ -232,6 +232,7 @@ pub async fn execute_task(
                 execution_result: None,
                 provider: step.request.provider.clone(),
                 task_id: None,
+                code_context: None,
             };
 
             task_manager.update_step_status(&step_id, TaskStatus::InProgress)?;
@@ -424,14 +425,15 @@ fn parse_task_breakdown(analysis: &str, request: &CodeRequest) -> Result<Vec<Tas
             status: TaskStatus::NotStarted,
             dependencies: deps,
             request: CodeRequest {
-                message: task.trim().to_string(),
+                message: format!("Task: {}", task),
                 language: request.language.clone(),
-                model: None,
+                model: request.model.clone(),
                 feedback: None,
                 error_message: None,
                 execution_result: None,
                 provider: None,
-                task_id: Some(i.to_string()),
+                task_id: None,
+                code_context: None,
             },
             result: None,
             created_at: Utc::now(),

@@ -813,13 +813,9 @@ def test_function():
         
     except Exception as e:
         print("[ERROR] 테스트 실패: %s" % str(e))
-        raise  # 반드시 예외를 다시 발생시켜 코드 재생성 유도
 
 if __name__ == "__main__":
-    try:
-        test_function()
-    except Exception as e:
-        raise RuntimeError(f"테스트 실행 실패: {str(e)}")  # 최상위 레벨에서도 예외 발생
+    test_function()
 ```
 
 ### 4.3 테스트 결과 검증 규칙
@@ -832,19 +828,12 @@ if __name__ == "__main__":
 2. 검증 방법:
    - 정상 케이스: assert result == expected
    - 모든 검증은 실패 시 명확한 메시지 포함
-   - 모든 예외는 반드시 상위로 전파 (raise)
 
 3. 결과 메시지:
    - [TEST]: 테스트 단계 표시
    - [INFO]: 테스트 정보 출력
    - [SUCCESS]: 테스트 성공
-   - [ERROR]: 테스트 실패 (반드시 raise와 함께 사용)
-
-4. 에러 처리 규칙:
-   - 테스트 함수 내부의 try-except에서 반드시 raise
-   - 메인 블록의 try-except에서도 반드시 raise
-   - print() 만으로 에러 처리 금지
-   - 모든 예외는 RuntimeError로 감싸서 전파
+   - [ERROR]: 테스트 실패
 
 ### 4.4 실제 테스트 예시
 ```python

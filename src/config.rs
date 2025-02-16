@@ -30,7 +30,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             default_provider: Some("openai".to_string()),
-            default_model: Some("gpt-3.5-turbo".to_string()),
+            default_model: Some("gpt-4o-mini".to_string()),
             history_size: Some(10),
             max_context_length: Some(4000),  // 기본 최대 컨텍스트 길이
             context_window_ratio: Some(0.8),  // 기본 컨텍스트 윈도우 비율
@@ -336,11 +336,9 @@ pub fn setup_config() -> Result<()> {
     // Select model
     let models = match provider.as_str() {
         "OpenAI" => vec![
-            "gpt-3.5-turbo".to_string(),
-            "gpt-4-turbo".to_string(),
-            "gpt-4".to_string(),
-            "gpt-4-32k".to_string(),
-            "gpt-3.5-turbo-16k".to_string()
+            "gpt-4o-mini".to_string(),
+            "gpt-4o".to_string(),
+            "gpt-4".to_string()
         ],
         "Anthropic" => vec![
             "claude-3-sonnet-20240229".to_string(),

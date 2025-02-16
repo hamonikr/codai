@@ -114,6 +114,7 @@ async fn handle_code_command(
         execution_result: None,
         provider: provider.clone(),
         task_id: None,
+        code_context: None,
     };
 
     let start_time = std::time::Instant::now();
@@ -201,17 +202,18 @@ async fn handle_code_command(
                 if config.code_review_enabled.unwrap_or(true) {
                     let review_request = CodeRequest {
                         message: response.code.clone(),
-                        language: Some(language.clone()),
+                        language: None,
                         model: model.clone(),
                         feedback: None,
                         error_message: None,
                         execution_result: Some(ExecutionResult {
-                            stdout: result.stdout,
-                            stderr: result.stderr,
-                            success: true
+                            stdout: result.stdout.clone(),
+                            stderr: result.stderr.clone(),
+                            success: result.success,
                         }),
                         provider,
                         task_id: None,
+                        code_context: None,
                     };
 
                     if let Ok(review_response) = code_generator::generate_code(review_request, config).await {
@@ -349,6 +351,7 @@ async fn handle_code_command(
                         execution_result: None,
                         provider: provider.clone(),
                         task_id: None,
+                        code_context: None,
                     };
 
                     let new_response = generate_code(request, config).await?;
@@ -387,6 +390,7 @@ async fn handle_code_command(
                             execution_result: None,
                             provider: provider.clone(),
                             task_id: None,
+                            code_context: None,
                         };
 
                         let new_response = match generate_code(request, config).await {
@@ -483,6 +487,7 @@ async fn handle_task_command(
         execution_result: None,
         provider,
         task_id: None,
+        code_context: None,
     };
 
     let mut task_manager = TaskManager::new();

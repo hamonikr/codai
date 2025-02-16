@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeContext {
+    pub original_request: String,
+    pub previous_code: String,
+    pub error_message: String,
+    pub attempt_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CodeRequest {
     pub message: String,
     pub language: Option<String>,
@@ -10,6 +18,7 @@ pub struct CodeRequest {
     pub execution_result: Option<ExecutionResult>,
     pub provider: Option<String>,
     pub task_id: Option<String>,
+    pub code_context: Option<CodeContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

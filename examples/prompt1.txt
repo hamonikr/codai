@@ -1,1 +1,1 @@
-"create a program that uses numpy and pandas to analyze a sample dataset"
+"샘플 데이터 파일을 만들고, create a program that uses numpy and pandas to analyze a sample dataset"

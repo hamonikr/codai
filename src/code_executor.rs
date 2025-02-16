@@ -14,7 +14,7 @@ use lazy_static::lazy_static;
 use serde_json::Value;
 use crate::config::Config;
 use crate::code_generator::generate_code;
-use crate::types::{CodeRequest, ExecutionResult, UTILS_PY, TOOLS_CONF};
+use crate::types::{CodeRequest, ExecutionResult, UTILS_PY, TOOLS_CONF, CodeContext};
 use std::sync::Mutex;
 use crate::history::{HistoryManager, RequestHistory, TokenUsage};
 use uuid::Uuid;
@@ -510,6 +510,7 @@ pub async fn execute_code_with_retry(
             execution_result: None,
             provider: provider.clone(),
             task_id: None,
+            code_context: None,
         };
 
         let response = generate_code(request, config).await?;
@@ -556,8 +557,8 @@ pub async fn execute_code_with_retry(
                     if !missing_packages.is_empty() {
                         println!("\n{}", "Installing missing packages:".yellow());
                         let mut all_packages_installed = true;
-                        for package in missing_packages {
-                            if let Err(e) = executor.install_package(&package) {
+                        for package in &missing_packages {
+                            if let Err(e) = executor.install_package(package) {
                                 println!("Failed to install package {}: {}", package, e);
                                 all_packages_installed = false;
                                 break;
@@ -571,15 +572,28 @@ pub async fn execute_code_with_retry(
                     if retry_count < max_retries - 1 {
                         println!("\n{}", format!("Regenerating code... (attempt {}/{})", retry_count + 2, max_retries).yellow());
                         
+                        // 에러 메시지 분석
+                        let error_analysis = if !missing_packages.is_empty() {
+                            format!("Missing packages: {}. Please add these imports and try again.", missing_packages.into_iter().collect::<Vec<_>>().join(", "))
+                        } else {
+                            format!("Execution failed with error: {}. Previous code had issues: {}", output.stderr.clone(), current_code)
+                        };
+
                         let regenerate_request = CodeRequest {
                             message: message.to_string(),
                             language: Some(language.to_string()),
                             model: config.default_model.clone(),
-                            feedback: None,
-                            error_message: Some(output.stderr),
+                            feedback: Some("Previous code failed to execute. Please fix the errors and maintain the original functionality.".to_string()),
+                            error_message: Some(error_analysis.clone()),
                             execution_result: None,
                             provider: provider.clone(),
                             task_id: None,
+                            code_context: Some(CodeContext {
+                                original_request: message.to_string(),
+                                previous_code: current_code.clone(),
+                                error_message: error_analysis,
+                                attempt_count: retry_count + 1,
+                            }),
                         };
 
                         let new_response = generate_code(regenerate_request, config).await?;
@@ -605,6 +619,12 @@ pub async fn execute_code_with_retry(
                         execution_result: None,
                         provider: provider.clone(),
                         task_id: None,
+                        code_context: Some(CodeContext {
+                            original_request: message.to_string(),
+                            previous_code: current_code.clone(),
+                            error_message: e.to_string(),
+                            attempt_count: retry_count + 1,
+                        }),
                     };
 
                     let new_response = generate_code(error_request, config).await?;
