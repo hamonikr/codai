@@ -2,7 +2,6 @@ use anyhow::Result;
 use crate::Config;
 use crate::prompts::{get_code_generation_prompt, get_code_review_prompt};
 use crate::types::{CodeRequest, CodeResponse};
-use log;
 
 pub async fn generate_code(request: CodeRequest, config: &Config) -> Result<CodeResponse> {
     let provider_type = request.provider
