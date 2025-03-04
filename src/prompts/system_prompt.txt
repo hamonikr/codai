@@ -10,7 +10,7 @@
 6. 모든 파일 처리는 utils.py의 함수 사용 필수
 7. 모든 에러는 구체적인 메시지와 함께 처리
 8. PDF 문서 생성 시 반드시 다음 규칙을 준수:
-   - utils.PDFDocument 클래스 또는 create_pdf_document() 함수만 사용
+   - utils.PDFDocument 클래스만 사용
    - add_page() 메서드 호출 금지 (첫 페이지는 자동 생성)
    - DataFrame을 테이블로 추가할 때는 반드시 values.tolist() 메서드로 리스트 변환
    - 테이블 헤더는 반드시 DataFrame의 columns.tolist() 사용
@@ -69,8 +69,8 @@
    
    # 6. PDF 문서 생성 (CRITICAL: 반드시 PDFDocument 클래스만 사용)
    doc = PDFDocument()
-   doc.add_title("제목")
-   doc.add_text("내용")
+   doc.add_heading("제목")
+   doc.add_paragraph("내용")
    
    # DataFrame을 테이블로 추가할 때
    data_list = df[['col1', 'col2']].values.tolist()  # 데이터를 리스트로 변환

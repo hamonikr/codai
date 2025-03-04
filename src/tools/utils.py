@@ -1,31 +1,11 @@
+# cython: language_level=3
+# cython: boundscheck=False
+# cython: wraparound=True
+# cython: cdivision=True
+# cython: nonecheck=False
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 # version: 2.1.0
-
-# TODO: 추가 예정 기능 목록
-# 1. 데이터베이스 기능
-#    - PostgreSQL 연결 및 관리 기능
-#    - 이메일 메타데이터 저장 및 인덱싱
-#    - 전문 검색(Full-text search) 구현
-#    - 대용량 데이터 처리 최적화
-#
-# 2. 이메일 검색 기능
-#    - IMAP/POP3 프로토콜 지원
-#    - 이메일 본문 및 첨부파일 처리
-#    - 메타데이터 기반 검색 (보낸사람, 날짜, 제목 등)
-#    - 본문 내용 검색 및 필터링
-#
-# 3. 구글 캘린더 연동
-#    - OAuth2 인증 처리
-#    - 일정 조회/추가/수정/삭제
-#    - 알림 설정 지원
-#    - 반복 일정 관리
-#
-# 4. 카카오톡 메시지 전송
-#    - 카카오톡 REST API 연동
-#    - 텍스트/이미지 메시지 전송
-#    - 템플릿 메시지 지원
-#    - 대화방 관리 기능
 
 import os
 import shutil
@@ -56,6 +36,17 @@ import asyncio
 import configparser
 from pathlib import Path
 from fpdf import FPDF
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfgen import canvas
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
+from reportlab.platypus.frames import Frame
+from reportlab.platypus.doctemplate import PageTemplate
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+import cairosvg
+from reportlab.platypus.tableofcontents import TableOfContents
 
 def load_config() -> dict:
     """
@@ -167,7 +158,8 @@ REQUIRED_PACKAGES = [
     ("lxml[html_clean]", "lxml"),  # html_clean feature 포함
     ("python-docx", "docx"),
     ("trafilatura", "trafilatura"),
-    ("cairosvg", "cairosvg")
+    ("cairosvg", "cairosvg"),
+    ("tabulate", "tabulate")  # 테이블 처리를 위한 패키지 추가
 ]
 
 # 패키지 설치 상태 확인 및 설치
@@ -285,6 +277,39 @@ def convert_image_to_rgb(img):
     return img
 
 class HWPDocument:
+    
+    # 본문 스타일 정의 추가
+    paragraph_styles = {
+        # 0-2: 기본 크기 (왼쪽, 가운데, 오른쪽)
+        'normal': {'char_pr_id': '0', 'align': 'left', 'font_size': 10, 'line_spacing': '120'},
+        'center': {'char_pr_id': '0', 'align': 'center', 'line_spacing': '120'},
+        'right': {'char_pr_id': '0', 'align': 'right', 'line_spacing': '120'},
+        
+        # 3-5: 중간 크기 (왼쪽, 가운데, 오른쪽)
+        'medium': {'char_pr_id': '10', 'align': 'left', 'font_size': 12, 'line_spacing': '130', 'para_pr_id': '10'},
+        'medium_center': {'char_pr_id': '10', 'align': 'center', 'font_size': 12, 'line_spacing': '130', 'para_pr_id': '11'},
+        'medium_right': {'char_pr_id': '10', 'align': 'right', 'font_size': 12, 'line_spacing': '130', 'para_pr_id': '12'},
+        
+        # 6-8: 큰 크기 (왼쪽, 가운데, 오른쪽)
+        'large': {'char_pr_id': '9', 'align': 'left', 'font_size': 14, 'bold': True, 'line_spacing': '150'},
+        'large_center': {'char_pr_id': '9', 'align': 'center', 'font_size': 14, 'bold': True, 'line_spacing': '150'},
+        'large_right': {'char_pr_id': '9', 'align': 'right', 'font_size': 14, 'bold': True, 'line_spacing': '150'},
+        
+        # 9-11: 중간 크기 굵은체 (왼쪽, 가운데, 오른쪽)
+        'medium_bold': {'char_pr_id': '12', 'align': 'left', 'font_size': 12, 'bold': True, 'line_spacing': '130', 'para_pr_id': '13'},
+        'medium_bold_center': {'char_pr_id': '12', 'align': 'center', 'font_size': 12, 'bold': True, 'line_spacing': '130', 'para_pr_id': '14'},
+        'medium_bold_right': {'char_pr_id': '12', 'align': 'right', 'font_size': 12, 'bold': True, 'line_spacing': '130', 'para_pr_id': '15'},
+        
+        # 12-14: 큰 글씨 보통체 (왼쪽, 가운데, 오른쪽)
+        'large_normal': {'char_pr_id': '11', 'align': 'left', 'font_size': 14, 'line_spacing': '150', 'para_pr_id': '16'},
+        'large_normal_center': {'char_pr_id': '11', 'align': 'center', 'font_size': 14, 'line_spacing': '150', 'para_pr_id': '17'},
+        'large_normal_right': {'char_pr_id': '11', 'align': 'right', 'font_size': 14, 'line_spacing': '150', 'para_pr_id': '18'},
+        
+        # 15-16: 기타 스타일
+        'emphasis': {'char_pr_id': '0', 'align': 'left', 'font_size': 10, 'bold': True, 'line_spacing': '120'},
+        'quote': {'char_pr_id': '0', 'align': 'left', 'indent': 20, 'line_spacing': '120'},
+    }
+        
     def __init__(self):
         self.elements = []  # (type, content, page_break, options) 튜플 리스트
         self.has_title = False  # 제목 존재 여부 추적
@@ -297,19 +322,134 @@ class HWPDocument:
             raise FileNotFoundError(f"템플릿 파일을 찾을 수 없습니다: {self.template_path}")
         self._temp_files = []  # Track temporary files for cleanup
         
+    @staticmethod
+    def _convert_image_to_rgb(img):
+        """Convert image to RGB mode safely.
+        
+        Args:
+            img: PIL Image object
+        
+        Returns:
+            PIL Image object in RGB mode
+        """
+        if img.mode in ('RGBA', 'LA'):
+            # RGBA나 LA 모드인 경우 알파 채널을 고려하여 변환
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if 'A' in img.mode:  # 알파 채널이 있는 경우
+                background.paste(img, mask=img.split()[-1])
+            else:
+                background.paste(img)
+            return background
+        elif img.mode == 'P':  # 팔레트 모드
+            return img.convert('RGB')
+        elif img.mode != 'RGB':  # 그 외 모드
+            return img.convert('RGB')
+        return img        
+        
+    @staticmethod
+    def _read_url(url: str) -> Union[str, bytes]:
+        """
+        Read and return the contents of a URL.
+        URL의 내용을 읽어 반환합니다.
+        
+        Args:
+            url (str): URL to read from
+                읽을 URL
+            
+        Returns:
+            Union[str, bytes]: Contents of the URL. Returns bytes for binary content (images, etc)
+                            URL의 내용. 바이너리 콘텐츠(이미지 등)의 경우 bytes 반환
+            
+        Raises:
+            requests.RequestException: If the URL request fails
+                                    URL 요청 실패 시
+        """
+        response = requests.get(url, verify=False)
+        response.raise_for_status()
+        
+        # Check content type
+        content_type = response.headers.get('content-type', '').lower()
+        if any(t in content_type for t in ['image/', 'video/', 'audio/', 'application/octet-stream']):
+            return response.content
+        return response.text
+        
     def _preprocess_text(self, text):
-        """텍스트를 전처리합니다."""
+        """특수문자와 글머리 기호를 처리하는 내부 메서드"""
         if not text:
             return text
-            
-        # 마크다운 형식이 있는 경우 그대로 반환
-        if re.match(r'^#{1,6}\s+', text.strip()) or re.match(r'^\d+\.\s+', text.strip()):
+
+        # ** 문자 제거 (가장 먼저 처리)
+        text = text.replace('**', '')
+
+        # 마크다운 형식이나 섹션 제목은 그대로 반환
+        if re.match(r'^#{1,6}\s+', text.strip()) or \
+           re.match(r'^\d+\.\s+', text.strip()) or \
+           'KPI' in text:  # KPI가 포함된 경우 그대로 반환
             return text
+                
+        # 보존할 패턴 정의
+        preserved_patterns = [
+            # 숫자 관련
+            (r'\d+(?:\.\d+)?%', lambda m: m.group()),  # 20%, 50.5% 등
+            (r'\d+(?:\.\d+)?(?:천|만|억|조)?원', lambda m: m.group()),  # 5억 원, 10만 원 등
+            (r'\d+(?:\.\d+)?(?:차)?년도', lambda m: m.group()),  # 1차년도, 2년도 등
+            (r'\d+\s*(?:개|건|회|명)', lambda m: m.group()),  # 10개, 20건 등
             
-        # 나머지 텍스트 전처리
-        text = text.replace('\r\n', '\n').replace('\r', '\n')
-        text = re.sub(r'\n{3,}', '\n\n', text)  # 3개 이상 연속된 줄바꿈을 2개로
-        text = text.strip()
+            # 특수 형식
+            (r'[A-Z]+(?:/[A-Z]+)*', lambda m: m.group()),  # KPI, ESG, R&D 등
+            (r'\([^)]*\)', lambda m: m.group()),  # 괄호 안 내용
+            
+            # 날짜/시간
+            (r'\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}', lambda m: m.group()),
+        ]
+        
+        # 임시 토큰으로 보존할 패턴 치환
+        preserved_tokens = {}
+        for pattern, replacement in preserved_patterns:
+            text = re.sub(pattern, lambda m: preserved_tokens.setdefault(f'__TOKEN_{len(preserved_tokens)}__', 
+                         replacement(m) if callable(replacement) else replacement), text)
+        
+        # 특수문자 처리 규칙
+        special_chars_map = {
+            # 수학 기호
+            '×': '×',  # 곱하기 기호 유지
+            '÷': '÷',  # 나누기 기호 유지
+            '±': '±',  # 플러스마이너스 유지
+            '∓': '∓',  # 마이너스플러스 유지
+            '∔': '+',  # 플러스로 변환
+            '∸': '-',  # 마이너스로 변환
+            '∹': '/',  # 나누기로 변환
+            '⋅': '·',  # 가운뎃점 유지
+            
+            # 일반 특수문자
+            '&': '&',      # & 유지
+            '%': '%',      # % 유지
+            '=': '=',      # = 유지
+            '/': '/',      # / 유지
+            
+            # 공백 문자
+            '\u3000': ' ',  # 전각 공백
+            '\u200b': '',   # 제로 너비 공백
+            '\ufeff': '',   # BOM
+        }
+        
+        # 특수문자 치환
+        for char, replacement in special_chars_map.items():
+            text = text.replace(char, replacement)
+        
+        # 보존된 패턴 복원
+        for token, original in preserved_tokens.items():
+            text = text.replace(token, original)
+        
+        # XML 특수문자 이스케이프
+        text = text.replace('&', '&amp;')
+        text = text.replace('<', '&lt;')
+        text = text.replace('>', '&gt;')
+        text = text.replace('"', '&quot;')
+        text = text.replace("'", '&apos;')
+        
+        # 연속된 공백을 하나로
+        text = ' '.join(text.split())
         
         return text
 
@@ -342,83 +482,100 @@ class HWPDocument:
         result = []
         current = []
         
-        def is_list_item(line):
-            """목차 항목인지 확인"""
+        def should_start_new_line(line):
+            """새로운 줄을 시작해야 하는지 확인"""
             stripped = line.strip()
-            # 마크다운 헤더와 숫자가 함께 있는 경우는 목차 항목으로 처리하지 않음
-            if stripped.startswith('#') and re.search(r'#+ \d+\.', stripped):
-                return False
-            # 숫자로 시작하고 점이나 괄호가 있는 경우
-            if re.match(r'^\d+[\.\)]', stripped):
+            # 빈 줄
+            if not stripped:
                 return True
-            # 점이 많이 반복되는 경우 (목차의 점선)
-            if '.' * 3 in stripped:
+            # 글머리 기호로 시작하는 줄
+            if stripped.startswith(('-', '•', '*', '+')):
+                return True
+            # 숫자 목록 (1., 1.1. 등)
+            if re.match(r'^\d+\.(\d+\.)?\s', stripped):
+                return True
+            # 마크다운 헤더
+            if stripped.startswith('#'):
                 return True
             return False
-            
-        def should_break_line(line):
-            """줄바꿈이 필요한지 확인"""
-            markers = ['다.', '까?', '요.', '임.', '됨.', '함.', '.', '?', '!', 
-                      '[Page', 'http://', 'https://', '제', '장', '절']
+
+        def should_end_line(line):
+            """현재 줄을 종료해야 하는지 확인"""
             stripped = line.strip()
-            
-            # 마크다운 헤더는 그대로 유지
-            if stripped.startswith('#'):
+            # URL이나 특수 형식
+            if any(marker in stripped for marker in ['http://', 'https://', '[Page']):
                 return True
-                
-            return any(stripped.endswith(m) for m in markers) or is_list_item(stripped)
-        
-        for line in lines:
-            stripped = line.strip()
-            
-            # 마크다운 헤더는 그대로 유지
-            if stripped.startswith('#'):
-                if current:
-                    result.append(' '.join(current))
-                    current = []
-                result.append(line)
-                continue
+            # 문장 종결 부호로 끝나는 경우
+            return stripped.endswith(('다.', '까?', '요.', '임.', '됨.', '함.', '.', '?', '!'))
+
+        lines = [line.rstrip() for line in lines]  # 오른쪽 공백만 제거
+        i = 0
+        while i < len(lines):
+            line = lines[i]
             
             # 빈 줄 처리
-            if not stripped:
+            if not line.strip():
                 if current:
                     result.append(' '.join(current))
                     current = []
                 result.append('')
+                i += 1
                 continue
-                
-            # 목차 항목이나 줄바꿈이 필요한 경우
-            if should_break_line(stripped):
+            
+            # 현재 줄이 하이픈으로 끝나고 다음 줄이 있는 경우
+            if line.endswith('-') and i + 1 < len(lines):
+                if current:
+                    current.append(line[:-1])  # 하이픈 제거
+                    current.append(lines[i + 1].strip())
+                else:
+                    current = [line[:-1], lines[i + 1].strip()]
+                i += 2
+                continue
+            
+            # 새로운 줄을 시작해야 하는 경우
+            if should_start_new_line(line.strip()):
                 if current:
                     result.append(' '.join(current))
                     current = []
-                result.append(line)
+                result.append(line.strip())
+                i += 1
                 continue
-                
-            # 들여쓰기된 새로운 문단
-            if line[0].isspace() and not current:
-                result.append(line)
-                continue
-                
-            # URL이나 특수 형식
-            if any(marker in stripped for marker in ['http://', 'https://', '[Page']):
+            
+            # 현재 줄을 종료해야 하는 경우
+            if should_end_line(line.strip()):
                 if current:
+                    current.append(line.strip())
                     result.append(' '.join(current))
                     current = []
-                result.append(line)
+                else:
+                    result.append(line.strip())
+                i += 1
                 continue
-                
+            
             # 일반적인 문장 연결
             if current:
-                current.append(stripped)
+                current.append(line.strip())
             else:
-                current = [stripped]
+                current = [line.strip()]
+            i += 1
         
         # 남은 문장 처리
         if current:
             result.append(' '.join(current))
         
-        return result
+        # 연속된 빈 줄 정리 (최대 2개까지만 허용)
+        final_result = []
+        empty_count = 0
+        for line in result:
+            if not line:
+                empty_count += 1
+                if empty_count <= 2:
+                    final_result.append(line)
+            else:
+                empty_count = 0
+                final_result.append(line)
+        
+        return final_result
 
     def _normalize_content(self, content):
         """파일 내용을 정규화하면서 원본 포맷을 최대한 유지합니다."""
@@ -476,86 +633,247 @@ class HWPDocument:
         
         return result
 
-    def add_heading(self, text, page_break=False, options=None):
+    def add_heading(self, text: str, level: int = 1, page_break: bool = False, options: dict = None) -> None:
         """문서에 제목을 추가합니다.
         Args:
             text (str): 제목 텍스트
-            page_break (bool): 페이지 나누기 여부
-            options (dict): 추가 옵션 (예: {'size': '8'})
-        """
-        if not options:
-            options = {'size': '3'}
-        self.elements.append(('heading', text, page_break, options))
-        self.has_title = True
-
-    def add_paragraph(self, text, page_break=False, options=None):
-        """문서에 단락을 추가합니다.
-        Args:
-            text: 추가할 텍스트 (str, list, DataFrame 등 다양한 타입 지원)
+            level (int): 제목 레벨 (1: 문서 제목, 2: 제목 1, 3: 제목 2, 4: 제목 3, 5: 제목 4)
             page_break (bool): 페이지 나누기 여부
             options (dict): 추가 옵션
         """
-        if not text:  # 빈 텍스트 처리
-            return
-            
-        # DataFrame 처리
-        if hasattr(text, 'to_string'):  # pandas DataFrame인 경우
-            # DataFrame을 표로 변환
-            header = text.columns.tolist()
-            data = text.values.tolist()
-            self.add_table(data, header=header)
-            return
-            
-        # 리스트나 튜플을 문자열로 변환
-        if isinstance(text, (list, tuple)):
-            text = '\n'.join(str(item) for item in text)
-        # 그 외 타입은 str로 변환
-        elif not isinstance(text, str):
-            text = str(text)
-            
-        # 줄 단위로 처리
-        lines = text.split('\n')
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                continue
-                
-            # 마크다운 헤더 확인 (##, ###)
-            header_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
-            if header_match:
-                level = len(header_match.group(1))
-                title_text = header_match.group(2).strip()
-                # 레벨에 따른 스타일 매핑 (# = 3, ## = 4, ### = 5, ...)
-                style_id = str(2 + level)  # level이 1(#)이면 3, 2(##)이면 4, 3(###)이면 5
-                self.add_heading(title_text, page_break=page_break, options={'size': style_id})
-                continue
-            
-            # 숫자로 시작하는 제목 패턴 (### 1. 형식)
-            numbered_title_match = re.match(r'^###\s+(\d+\.)\s+(.+)$', stripped)
-            if numbered_title_match:
-                number = numbered_title_match.group(1)
-                title_text = numbered_title_match.group(2).strip()
-                self.add_heading(f"{number} {title_text}", page_break=page_break, options={'size': '5'})
-                continue
-            
-            # 일반 텍스트는 add_text_content로 처리
-            self.add_text_content(line)
+        if not options:
+            options = {}
+    
+        # 레벨에 따른 스타일 매핑
+        level_styles = {
+            1: {'style': '2', 'charPrIDRef': '2'},  # 문서 제목 (16pt, 굵게, 가운데)
+            2: {'style': '3', 'charPrIDRef': '3'},  # 제목 1 (14pt, 굵게, 파란색)
+            3: {'style': '4', 'charPrIDRef': '4'},  # 제목 2 (12pt, 굵게, 파란색)
+            4: {'style': '5', 'charPrIDRef': '5'},  # 제목 3 (11pt, 굵게, 파란색)
+            5: {'style': '6', 'charPrIDRef': '6'},  # 제목 4 (10pt, 굵게, 파란색)
+        }
+    
+        # 기본 스타일에 사용자 옵션 병합
+        style = level_styles.get(level, {'style': '2', 'charPrIDRef': '2'})
+        style.update(options)
+    
+        text = self._preprocess_text(text)
+        self.elements.append(('heading', text, page_break, style))
+        self.has_title = True
 
-    def add_text_content(self, text):
+    def add_paragraph(self, text: str, page_break: bool = False, options: Dict = None, style: Union[str, int] = None) -> None:
+        """문단 추가
+        
+        Args:
+            text: 추가할 텍스트 (str, list, DataFrame 등 다양한 타입 지원)
+            page_break (bool): 페이지 나누기 여부
+            options (Dict, optional): 문단 옵션
+                - font_name (str): 폰트 이름
+                - font_size (int): 폰트 크기
+                - bold (bool): 굵게
+                - align (str): 정렬 ('left', 'center', 'right')
+                - indent (int): 들여쓰기
+                - spacing_before (int): 문단 앞 간격
+                - spacing_after (int): 문단 뒤 간격
+                - tab_stops (List[Dict]): 탭 설정
+                    - position (int): 탭 위치
+                    - alignment (str): 탭 정렬
+                    - leader (str): 리더 문자 (예: 'dot')
+                - field_code (bool): 필드 코드 여부
+                - bookmark (bool): 북마크 여부
+            style (str or int, optional): 미리 정의된 스타일 이름 또는 인덱스 번호
+                                  style이 제공되면 options는 추가 옵션으로 처리됩니다.
+                                  
+                                  인덱스 번호 설명:
+                                  - 0-2: 기본 크기 (왼쪽, 가운데, 오른쪽)
+                                  - 3-5: 중간 크기 (왼쪽, 가운데, 오른쪽)
+                                  - 6-8: 큰 크기 굵은체 (왼쪽, 가운데, 오른쪽)
+                                  - 9-11: 중간 크기 굵은체 (왼쪽, 가운데, 오른쪽)
+                                  - 12-14: 큰 크기 보통체 (왼쪽, 가운데, 오른쪽)
+                                  - 15: 강조 (굵게)
+                                  - 16: 인용문 (들여쓰기)
+        """
+        # style이 제공된 경우 add_styled_paragraph 메서드 호출
+        if style is not None:
+            # style이 정수인 경우 스타일 목록에서 해당 인덱스의 스타일 이름을 가져옴
+            if isinstance(style, int):
+                style_keys = list(self.paragraph_styles.keys())
+                if 0 <= style < len(style_keys):
+                    style = style_keys[style]
+                else:
+                    raise ValueError(f"유효하지 않은 스타일 인덱스입니다: {style}. 유효한 범위: 0-{len(style_keys)-1}")
+            
+            return self.add_styled_paragraph(text, style=style, page_break=page_break, additional_options=options)
+        # style이 제공되지 않은 경우 기본 문단 추가 로직 실행
+        else:
+            try:
+                if not text:  # 빈 텍스트 처리
+                    return
+                    
+                if options is None:
+                    options = {}
+                    
+                # 필드 코드 처리
+                if options.get('field_code'):
+                    if text.startswith('{PAGE}'):
+                        # 페이지 번호 필드
+                        self.elements.append(('field', 'page_number', None, options))
+                    elif text.startswith('{REF'):
+                        # 페이지 참조 필드
+                        self.elements.append(('field', 'page_ref', text[5:-4], options))
+                    return
+                    
+                # 북마크 처리
+                if options.get('bookmark'):
+                    if text.startswith('{BM='):
+                        # 북마크 추가
+                        bookmark_name = text[4:-1]
+                        self.elements.append(('bookmark', bookmark_name, None, options))
+                    return
+                    
+                # DataFrame 처리
+                if hasattr(text, 'to_string'):  # pandas DataFrame인 경우
+                    # DataFrame을 표로 변환
+                    header = text.columns.tolist()
+                    data = text.values.tolist()
+                    self.add_table(data, header=header)
+                    return
+                    
+                # 리스트나 튜플을 문자열로 변환
+                if isinstance(text, (list, tuple)):
+                    text = '\n'.join(str(item) for item in text)
+                # 그 외 타입은 str로 변환
+                elif not isinstance(text, str):
+                    text = str(text)
+                    
+                # 줄 단위로 처리
+                lines = text.split('\n')
+                for line in lines:
+                    stripped = line.strip()
+                    stripped = self._preprocess_text(stripped)
+                    if not stripped:
+                        continue
+                        
+                    # 마크다운 헤더 확인 (##, ###)
+                    header_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+                    if header_match:
+                        level = len(header_match.group(1))
+                        title_text = header_match.group(2).strip()
+                        style_id = str(2 + level)
+                        self.add_heading(title_text, page_break=page_break, options={'size': style_id})
+                        continue
+                    
+                    # 숫자로 시작하는 제목 패턴 (### 1. 형식)
+                    numbered_title_match = re.match(r'^###\s+(\d+\.)\s+(.+)$', stripped)
+                    if numbered_title_match:
+                        number = numbered_title_match.group(1)
+                        title_text = numbered_title_match.group(2).strip()
+                        self.add_heading(f"{number} {title_text}", page_break=page_break, options={'size': '5'})
+                        continue
+                    
+                    # 일반 텍스트는 add_text_content로 처리
+                    self.add_text_content(line, options)
+                    
+            except Exception as e:
+                print(f"문단 추가 실패: {str(e)}")
+                raise
+
+    def add_text_content(self, text, options=None):
         """일반 텍스트 내용을 문서에 추가합니다."""
         if not text:
             return
             
+        if options is None:
+            options = {}
+            
         # ** 문자 제거
         text = text.replace('**', '')
+        text = self._preprocess_text(text)
+
+        # 글머리 기호 패턴 확인 함수
+        def has_bullet_point(text: str) -> bool:
+            # 숫자+괄호 패턴 (1), 2), 등)
+            if re.match(r'^\s*\d+\)\s+', text):
+                return True
+            # 원문자 숫자 패턴 (①, ②, 등)
+            if re.match(r'^\s*[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮]\s+', text):
+                return True
+            # 알파벳+괄호 패턴 (a), b), 등)
+            if re.match(r'^\s*[a-zA-Z]\)\s+', text):
+                return True
+            # 사각형, 다이아몬드 기호 패턴 (□, ■, ◆, ◇ 등)
+            if re.match(r'^\s*[□■◆◇]\s+', text):
+                return True
+            return False
+        
+        # 특수 글머리 기호 패턴 확인 함수 (※, ✱, ❖, -, –, — 등)
+        def has_special_bullet_point(text: str) -> bool:
+            # ※, ✱, ❖ 기호 패턴
+            if re.match(r'^\s*[※✱❖❍]\s+', text):
+                return True
+            # 대시(-) 패턴 (-, - , –, — 등)
+            if re.match(r'^\s*[-–—]\s+', text):
+                return True            
+            return False
+        
+        # 글머리 기호가 있는 경우 공백 2개 추가
+        if has_bullet_point(text):
+            text = "  " + text
+        
+        # 특수 글머리 기호가 있는 경우 공백 4개 추가
+        if has_special_bullet_point(text):
+            text = "    " + text
+            
+        # 문단 옵션 설정
+        paragraph_options = {
+            'char_pr_id': options.get('char_pr_id', "0"), 
+            'line_spacing': '120'
+        }
+        
+        # 정렬 옵션 처리
+        if 'align' in options:
+            paragraph_options['align'] = options['align']
+            
+        # 폰트 옵션 처리
+        if 'font_name' in options:
+            paragraph_options['font_name'] = options['font_name']
+        if 'font_size' in options:
+            paragraph_options['font_size'] = options['font_size']
+        if 'bold' in options:
+            paragraph_options['bold'] = options['bold']
+            
+        # 들여쓰기 옵션 처리
+        if 'indent' in options:
+            paragraph_options['indent'] = options['indent']
+            
+        # 간격 옵션 처리
+        if 'spacing_before' in options:
+            paragraph_options['spacing_before'] = options['spacing_before']
+        if 'spacing_after' in options:
+            paragraph_options['spacing_after'] = options['spacing_after']
             
         # 긴 문단 처리
         if len(text) > 60:
             for sentence in self._split_long_text(text):
                 if sentence.strip():
-                    self.elements.append(('paragraph', sentence.strip(), False, {'char_pr_id': "0", 'line_spacing': '120'}))
+                    self.elements.append(('paragraph', sentence.strip(), False, paragraph_options))
         else:
-            self.elements.append(('paragraph', text, False, {'char_pr_id': "0", 'line_spacing': '120'}))
+            self.elements.append(('paragraph', text, False, paragraph_options))
+
+    def add_tooltip(self, text):
+        """툴팁 추가
+        
+        Args:
+            text: 툴팁 텍스트
+        """
+        if not text:
+            return
+           
+        data = [
+            ["AI.RUN 2025. - Empowering Your AI Journey"],
+            [text]
+        ]
+        self.add_table(data, style=4, header_style=3, text_align='left')
 
     def add_page_break(self):
         """
@@ -564,200 +882,180 @@ class HWPDocument:
         self.elements.append(('paragraph', '', True, {'char_pr_id': "0"}))
 
     def add_image(self, image):
-        """Add an image to the document.
+        """이미지 추가
         
         Args:
-            image: Can be:
-                - str: Path to image file or URL
-                - bytes: Binary image data
-                - PIL.Image: PIL Image object
+            image: 이미지 파일 경로, 바이너리 데이터, 또는 PIL Image 객체
         """
-        import tempfile
-        from PIL import Image
-        import io
-        import os
-        import urllib.parse
-        import sys
-        
         try:
-            temp_img = None
-            img_obj = None
-            
-            # Check if input is PIL Image
-            if hasattr(image, 'mode') and hasattr(image, 'save'):
-                img_obj = convert_image_to_rgb(image)
-                
-            # Check if input is bytes
-            elif isinstance(image, bytes):
-                try:
-                    # Handle binary data
-                    img_obj = Image.open(io.BytesIO(image))
-                    img_obj = convert_image_to_rgb(img_obj)
-                except:
-                    # SVG 처리 시도
-                    try:
-                        temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                        os.close(temp_fd)
-                        cairosvg.svg2png(bytestring=image, write_to=temp_img)
-                        img_obj = Image.open(temp_img)
-                        img_obj = convert_image_to_rgb(img_obj)
-                    except Exception as svg_error:
-                        print(f"[WARNING] SVG 처리 실패: {str(svg_error)}")
-                        return
-                
-            # Check if input is URL
-            elif isinstance(image, str) and urllib.parse.urlparse(image).scheme in ('http', 'https'):
-                # SVG URL인 경우 처리
-                if image.lower().endswith('.svg'):
-                    try:
-                        temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                        os.close(temp_fd)
-                        cairosvg.svg2png(url=image, write_to=temp_img)
-                        img_obj = Image.open(temp_img)
-                        img_obj = convert_image_to_rgb(img_obj)
-                    except Exception as svg_error:
-                        print(f"[WARNING] SVG URL 처리 실패: {str(svg_error)}")
-                        return
-                else:
-                    # 일반 이미지 URL 처리
-                    img_data = read_url(image)
-                    if not img_data:
-                        raise Exception("Failed to download image from URL: %s" % image)
-                    
-                    # Convert to PIL Image
-                    img_obj = Image.open(io.BytesIO(img_data))
-                    img_obj = convert_image_to_rgb(img_obj)
-                
-            # Handle local file path
+            if isinstance(image, bytes):
+                # 바이너리 데이터를 PIL Image로 변환
+                img_obj = Image.open(io.BytesIO(image))
             elif isinstance(image, str):
-                # SVG 파일인 경우 처리
-                if image.lower().endswith('.svg'):
-                    try:
-                        temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                        os.close(temp_fd)
-                        cairosvg.svg2png(url=image, write_to=temp_img)
-                        img_obj = Image.open(temp_img)
-                        img_obj = convert_image_to_rgb(img_obj)
-                    except Exception as svg_error:
-                        print(f"[WARNING] SVG 파일 처리 실패: {str(svg_error)}")
-                        return
-                else:
-                    # Get various base directories
-                    current_file_dir = os.path.dirname(os.path.abspath(__file__))
-                    workspace_root = os.path.dirname(current_file_dir)
-                    cwd = os.getcwd()
-                    
-                    # If running from script, get script directory
-                    if sys.argv[0] and sys.argv[0] != '-c':
-                        script_path = os.path.abspath(sys.argv[0])
-                        script_dir = os.path.dirname(script_path)
-                    else:
-                        script_dir = cwd
-                    
-                    # Try different path resolutions in order of priority
-                    base_paths = {
-                        cwd: "현재 작업 디렉토리",
-                        script_dir: "스크립트 디렉토리",
-                        workspace_root: "워크스페이스 루트",
-                        current_file_dir: "utils.py 디렉토리"
-                    }
-                    
-                    possible_paths = []
-                    tried_paths = set()  # 중복 체크를 위한 set
-                    
-                    # 1. 먼저 주어진 경로 그대로 시도
-                    if os.path.isabs(image):
-                        if image not in tried_paths:
-                            possible_paths.append((image, "절대 경로"))
-                            tried_paths.add(image)
-                    else:
-                        # 2. 각 기준 디렉토리에서 상대 경로로 시도
-                        for base_dir, desc in base_paths.items():
-                            full_path = os.path.normpath(os.path.join(base_dir, image))
-                            if full_path not in tried_paths:
-                                possible_paths.append((full_path, desc))
-                                tried_paths.add(full_path)
-                    
-                    # Try each path
-                    paths_tried = []
-                    
-                    for path, desc in possible_paths:
-                        paths_tried.append(f"{path} ({desc})")
-                        if os.path.exists(path):
-                            # 이미지를 열고 RGB로 변환
-                            img_obj = Image.open(path)
-                            img_obj = convert_image_to_rgb(img_obj)
-                            break
-                    
-                    if img_obj is None:
-                        raise FileNotFoundError("이미지 파일을 찾을 수 없습니다: %s\n시도한 경로들:\n%s" % 
-                                             (image, "\n".join(f"- {p}" for p in paths_tried)))
-            
+                # 파일 경로
+                if not os.path.exists(image):
+                    raise print(f"이미지 파일을 찾을 수 없습니다: {image}")
+                img_obj = Image.open(image)
+            elif isinstance(image, Image.Image):
+                img_obj = image
             else:
-                raise ValueError("Unsupported image type. Must be file path, URL, bytes, or PIL Image")
+                raise print("지원되지 않는 이미지 형식입니다")
             
-            # 이미지 크기 조정 및 저장
-            if img_obj:
-                img_obj = self._resize_image_to_page_width(img_obj)
-                temp_fd, temp_img = tempfile.mkstemp(suffix='.jpg')
-                os.close(temp_fd)
-                img_obj.save(temp_img, 'JPEG', quality=95)
-                self._temp_files.append(temp_img)
+            # 이미지 처리
+            img_obj = self._convert_image_to_rgb(img_obj)
+            img_obj = self._resize_image_to_page_width(img_obj)
             
-            # 이미지 추가 전에 빈 줄 추가
-            self.elements.append(('paragraph', '', False, {'char_pr_id': "0"}))
+            # 원본 이미지 형식 확인 및 유지
+            original_format = img_obj.format
+            if not original_format or original_format == 'JPEG':
+                # 원본 형식이 없거나 JPEG인 경우 PNG로 저장 (무손실)
+                img_format = 'PNG'
+                file_ext = '.png'
+            else:
+                # 원본 형식 유지 (PNG, GIF, BMP 등)
+                img_format = original_format
+                file_ext = f'.{original_format.lower()}'
             
-            # 이미지 추가
-            if temp_img and os.path.exists(temp_img):
-                self.elements.append(('image', temp_img, False, {}))
-            
-            # 이미지 추가 후에 빈 줄 추가
-            self.elements.append(('paragraph', '', False, {'char_pr_id': "0"}))
-            
-            # 이미지 크기가 큰 경우 페이지 나누기 추가
-            if img_obj and (img_obj.size[1] > 400):  # 이미지 높이가 400픽셀 이상인 경우
-                self.elements.append(('paragraph', '', True, {'char_pr_id': "0"}))
+            # 임시 파일로 저장
+            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as temp_file:
+                # 고품질 설정으로 저장
+                if img_format == 'JPEG':
+                    img_obj.save(temp_file.name, img_format, quality=95)  # 높은 품질 설정
+                else:
+                    img_obj.save(temp_file.name, img_format)
+                    
+                self._temp_files.append(temp_file.name)
+                self.elements.append(('image', temp_file.name, False, {}))
             
         except Exception as e:
-            if temp_img and temp_img not in self._temp_files:
-                try:
-                    os.remove(temp_img)
-                except:
-                    pass
-            print(f"[WARNING] Image processing failed: {str(e)}")
-    
-    def add_table(self, data, header=None, page_break=False):
-        """
-        표를 추가합니다.
-        :param data: 2차원 리스트 형태의 표 데이터 ([[cell1, cell2], [cell3, cell4]] 형식)
-        :param header: 헤더 행 데이터 (옵션)
-        :param page_break: True이면 이 표 다음에 페이지 넘김을 추가합니다.
-        """
-        if not data:
-            raise ValueError("표 데이터가 비어있습니다.")
-        
-        # 헤더가 있는 경우 데이터 앞에 추가
-        if header:
-            table_data = [header] + data
-        else:
-            table_data = data
+            raise print(f"이미지 처리 중 오류 발생: {str(e)}")
 
-        # 모든 행의 길이가 동일한지 확인
-        row_lengths = set(len(row) for row in table_data)
-        if len(row_lengths) != 1:
-            raise ValueError("모든 행의 길이가 동일해야 합니다.")
-        
-        self.elements.append(('table', table_data, page_break, {}))
-
-    def _resize_image_to_page_width(self, img_obj):
-        """이미지를 페이지 너비에 맞게 크기 조정합니다.
+    def add_table(self, data, header=None, options: Dict = None, style: int = 2, align: str = 'center', text_align: str = 'center', header_style: int = None) -> None:
+        """표를 추가합니다.
         
         Args:
-            img_obj: PIL Image 객체
-            
-        Returns:
-            PIL Image: 크기가 조정된 이미지 객체
+            data: 표 데이터 (2차원 리스트)
+            header: 헤더 데이터 (선택사항)
+            options: 표 옵션 (선택사항)
+            style: 테두리 스타일 (1~8, 기본값: 2)
+                1: 회색 배경
+                2: 회색 테두리
+                3: 기본 테두리
+                4: 굵은 테두리
+                5: 이중 테두리
+                6: 점선 테두리
+                7: 굵은 실선
+                8: 이중 실선
+            align: 표 정렬 ('left', 'center', 'right', 기본값: 'center')
+            text_align: 셀 내용 정렬 ('left', 'center', 'right', 기본값: 'center')
+            header_style: 헤더 행 스타일 (1~8, 기본값: None - 지정하지 않으면 모든 행에 style 적용)
         """
+        try:
+            if not data:  # 빈 표 처리
+                return
+                
+            if options is None:
+                options = {}
+                
+            # align 값 검증
+            align = align.lower()
+            if align not in ['left', 'center', 'right']:
+                raise ValueError("align은 'left', 'center', 'right' 중 하나여야 합니다.")
+                
+            # text_align 값 검증
+            text_align = text_align.lower()
+            if text_align not in ['left', 'center', 'right']:
+                raise ValueError("text_align은 'left', 'center', 'right' 중 하나여야 합니다.")
+                
+            # HWPX 정렬 값으로 변환
+            align_map = {
+                'left': 'LEFT',
+                'center': 'CENTER',
+                'right': 'RIGHT'
+            }
+            hwpx_align = align_map[align]
+            hwpx_text_align = align_map[text_align]
+            
+            # style 값 검증
+            if not isinstance(style, int) or style < 1 or style > 8:
+                raise ValueError("style은 1에서 8 사이의 정수여야 합니다.")
+                
+            # 스타일 매핑 (사용자 스타일 -> HWPX 스타일 ID)
+            style_map = {
+                1: "2",   # 보더 없음
+                2: "3",   # 기본 테두리
+                3: "12",  # 회색 배경
+                4: "13",  # 양쪽 테두리
+                5: "20",  # 상하단 굵은 테두리
+                6: "22",  # 파란 테두리
+                7: "23",  # 검은 테두리에 회색 배경
+                8: "24"   # 빨간 테두리
+            }
+            
+            # 스타일 설정 적용
+            hwpx_style_id = style_map[style]
+            
+            # 헤더 스타일 설정
+            hwpx_header_style_id = None
+            if header_style is not None and header_style in style_map:
+                hwpx_header_style_id = style_map[header_style]
+            
+            options["style"] = {
+                "borderFillIDRef": hwpx_style_id,
+                "cellBorderFillIDRef": hwpx_style_id,
+                "headerFillIDRef": hwpx_header_style_id or hwpx_style_id
+            }
+            options["align"] = hwpx_align  # 정렬 옵션 추가
+            options["text_align"] = hwpx_text_align  # 셀 내용 정렬 옵션 추가
+            options["header_style"] = hwpx_header_style_id  # 헤더 스타일 옵션 추가
+            
+            # 빈 표 검사
+            if not data or len(data) == 0:
+                raise ValueError("빈 표는 추가할 수 없습니다")
+            
+            # 모든 행의 열 개수가 동일한지 확인
+            col_count = len(data[0])
+            if any(len(row) != col_count for row in data):
+                raise ValueError("모든 행의 열 개수가 동일해야 합니다")
+            
+            def sanitize_cell_text(text):
+                """표 셀의 텍스트를 안전하게 처리"""
+                if not text:
+                    return ""
+                    
+                # 문자열로 변환
+                text = str(text).strip()
+                
+                # XML 특수문자 이스케이프
+                text = text.replace('&', '&amp;')
+                text = text.replace('<', '&lt;')
+                text = text.replace('>', '&gt;')
+                text = text.replace('"', '&quot;')
+                text = text.replace("'", '&apos;')
+                
+                # 줄바꿈을 <hp:lineBreak/>로 변환
+                if '\n' in text:
+                    parts = text.split('\n')
+                    text = '<hp:lineBreak/>'.join(p.strip() for p in parts if p.strip())
+                    
+                return text
+            
+            # 헤더와 데이터 처리
+            processed_data = []
+            if header:
+                processed_data.append([sanitize_cell_text(cell) for cell in header])
+            for row in data:
+                processed_data.append([sanitize_cell_text(cell) for cell in row])
+            
+            # 표 데이터를 elements에 추가
+            self.elements.append(('table', processed_data, False, options))
+            
+        except Exception as e:
+            print(f"표 추가 실패: {str(e)}")
+            raise
+
+    def _resize_image_to_page_width(self, img_obj):
+        """이미지를 페이지 너비에 맞게 크기 조정합니다."""
         # A4 페이지 크기 (mm)
         A4_WIDTH_MM = 210
         A4_HEIGHT_MM = 297
@@ -765,8 +1063,8 @@ class HWPDocument:
         # 여백을 제외한 실제 사용 가능한 너비 (페이지 너비의 80%)
         TARGET_WIDTH_MM = A4_WIDTH_MM * 0.8
         
-        # HWP의 기본 해상도는 72 DPI
-        MM_TO_PIXELS = 72 / 25.4  # 1mm = 72/25.4 pixels
+        # 해상도를 96 DPI로 증가 (HWPX 표준에 더 가까움)
+        MM_TO_PIXELS = 96 / 25.4  # 1mm = 96/25.4 pixels
         
         # 목표 너비 (픽셀)
         target_width = int(TARGET_WIDTH_MM * MM_TO_PIXELS)
@@ -774,16 +1072,22 @@ class HWPDocument:
         # 현재 이미지 크기
         current_width, current_height = img_obj.size
         
+        # 이미지가 페이지 너비보다 작으면 원본 크기 유지
+        if current_width <= target_width:
+            return img_obj
+        
         # 비율 계산
         ratio = target_width / current_width
         target_height = int(current_height * ratio)
         
-        # 이미지 크기 조정
-        return img_obj.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        # 이미지 크기 조정 (고품질 리샘플링 사용)
+        return img_obj.resize((target_width, target_height), Image.Resampling.BICUBIC)
 
     def save(self, output_path):
-        """Save the document and cleanup temporary files."""
         try:
+            # 저장 경로의 디렉토리가 없으면 생성
+            os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+
             # 디버깅을 위한 로그 추가
             # print("[DEBUG] Elements to save:")
             for element in self.elements:
@@ -816,16 +1120,26 @@ class HWPDocument:
                 style_end = header_content.find('</hh:style>')
                 
                 # 스타일 섹션 정의
-                styles = '''<hh:style itemCnt="9">
+                styles = '''<hh:style itemCnt="10">
                     <hh:stylePr id="0" paraPrIDRef="0" charPrIDRef="0" nextStyleIDRef="0" type="PARA" name="바탕글" engName="Normal" />
                     <hh:stylePr id="1" paraPrIDRef="1" charPrIDRef="1" nextStyleIDRef="1" type="PARA" name="본문" engName="Body" />
-                    <hh:stylePr id="2" paraPrIDRef="2" charPrIDRef="2" nextStyleIDRef="2" type="PARA" name="개요2" engName="Outline2" />
-                    <hh:stylePr id="3" paraPrIDRef="3" charPrIDRef="3" nextStyleIDRef="3" type="PARA" name="개요3" engName="Outline3" />
-                    <hh:stylePr id="4" paraPrIDRef="4" charPrIDRef="4" nextStyleIDRef="4" type="PARA" name="개요4" engName="Outline4" />
-                    <hh:stylePr id="5" paraPrIDRef="5" charPrIDRef="5" nextStyleIDRef="5" type="PARA" name="개요5" engName="Outline5" />
-                    <hh:stylePr id="6" paraPrIDRef="6" charPrIDRef="6" nextStyleIDRef="6" type="PARA" name="개요6" engName="Outline6" />
-                    <hh:stylePr id="7" paraPrIDRef="7" charPrIDRef="7" nextStyleIDRef="7" type="PARA" name="개요7" engName="Outline7" />
-                    <hh:stylePr id="8" paraPrIDRef="8" charPrIDRef="8" nextStyleIDRef="8" type="PARA" name="제목" engName="Title" />
+                    <hh:stylePr id="2" paraPrIDRef="2" charPrIDRef="2" nextStyleIDRef="2" type="PARA" name="제목" engName="Title" />
+                    <hh:stylePr id="3" paraPrIDRef="3" charPrIDRef="3" nextStyleIDRef="3" type="PARA" name="제목 1" engName="Heading 1" />
+                    <hh:stylePr id="4" paraPrIDRef="4" charPrIDRef="4" nextStyleIDRef="4" type="PARA" name="제목 2" engName="Heading 2" />
+                    <hh:stylePr id="5" paraPrIDRef="5" charPrIDRef="5" nextStyleIDRef="5" type="PARA" name="제목 3" engName="Heading 3" />
+                    <hh:stylePr id="6" paraPrIDRef="6" charPrIDRef="6" nextStyleIDRef="6" type="PARA" name="제목 4" engName="Heading 4" />
+                    <hh:stylePr id="7" paraPrIDRef="7" charPrIDRef="7" nextStyleIDRef="7" type="PARA" name="제목 5" engName="Heading 5" />
+                    <hh:stylePr id="8" paraPrIDRef="8" charPrIDRef="8" nextStyleIDRef="8" type="PARA" name="머리말" engName="Header" />
+                    <hh:stylePr id="9" paraPrIDRef="9" charPrIDRef="9" nextStyleIDRef="9" type="PARA" name="표_셀" engName="Table Cell" />
+                    <hh:stylePr id="10" paraPrIDRef="10" charPrIDRef="10" nextStyleIDRef="10" type="PARA" name="중간글씨" engName="Medium Text" />
+                    <hh:stylePr id="11" paraPrIDRef="11" charPrIDRef="10" nextStyleIDRef="11" type="PARA" name="중간글씨가운데정렬" engName="Medium Center" />
+                    <hh:stylePr id="12" paraPrIDRef="12" charPrIDRef="10" nextStyleIDRef="12" type="PARA" name="중간글씨오른쪽정렬" engName="Medium Right" />
+                    <hh:stylePr id="13" paraPrIDRef="13" charPrIDRef="12" nextStyleIDRef="13" type="PARA" name="중간글씨굵게" engName="Medium Bold" />
+                    <hh:stylePr id="14" paraPrIDRef="14" charPrIDRef="12" nextStyleIDRef="14" type="PARA" name="중간글씨굵게가운데정렬" engName="Medium Bold Center" />
+                    <hh:stylePr id="15" paraPrIDRef="15" charPrIDRef="12" nextStyleIDRef="15" type="PARA" name="중간글씨굵게오른쪽정렬" engName="Medium Bold Right" />
+                    <hh:stylePr id="16" paraPrIDRef="16" charPrIDRef="11" nextStyleIDRef="16" type="PARA" name="큰글씨보통" engName="Large Normal" />
+                    <hh:stylePr id="17" paraPrIDRef="17" charPrIDRef="11" nextStyleIDRef="17" type="PARA" name="큰글씨보통가운데정렬" engName="Large Normal Center" />
+                    <hh:stylePr id="18" paraPrIDRef="18" charPrIDRef="11" nextStyleIDRef="18" type="PARA" name="큰글씨보통오른쪽정렬" engName="Large Normal Right" />
                 </hh:style>'''
 
                 if style_start == -1 or style_end == -1:
@@ -852,45 +1166,53 @@ class HWPDocument:
                     raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
 
                 # 새로운 문단 모양 정의
-                para_properties = '''<hh:paraProperties itemCnt="10">
+                para_properties = '''<hh:paraProperties itemCnt="19">
                     <hh:paraPr id="0" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
                         <hh:margin left="0" right="0" prev="0" next="0" />
-                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="1" tabPrIDRef="1" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
-                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
+                        <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="RIGHT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="2" tabPrIDRef="2" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="CENTER" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="3" tabPrIDRef="3" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="4" tabPrIDRef="4" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="5" tabPrIDRef="5" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="6" tabPrIDRef="6" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="7" tabPrIDRef="7" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
+                        <hh:margin left="0" right="0" prev="600" next="600" />
                         <hh:lineSpacing type="PERCENT" value="160" />
+                        <hh:align horizontal="LEFT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                     <hh:paraPr id="8" tabPrIDRef="8" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
@@ -898,31 +1220,86 @@ class HWPDocument:
                         <hh:lineSpacing type="PERCENT" value="160" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
-                    <hh:paraPr id="9" tabPrIDRef="9" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
-                        <hh:margin left="0" right="0" prev="0" next="0" />
-                        <hh:lineSpacing type="PERCENT" value="160" />
+                    <hh:paraPr id="9" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="CENTER" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="10" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="LEFT" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="11" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="CENTER" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="12" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="RIGHT" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="13" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="LEFT" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="14" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="CENTER" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="15" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="130" />
+                        <hh:align horizontal="RIGHT" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="16" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="150" />
+                        <hh:align horizontal="LEFT" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="17" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="150" />
+                        <hh:align horizontal="CENTER" />
+                        <hh:border borderFillIDRef="2" />
+                    </hh:paraPr>
+                    <hh:paraPr id="18" tabPrIDRef="0" condense="0" fontLineHeight="0" snapToGrid="0" suppressLineNumbers="0" checked="0">
+                        <hh:margin left="0" right="0" prev="300" next="300" />
+                        <hh:lineSpacing type="PERCENT" value="150" />
+                        <hh:align horizontal="RIGHT" />
                         <hh:border borderFillIDRef="2" />
                     </hh:paraPr>
                 </hh:paraProperties>'''
-
-                # 문단 모양 섹션 전체 교체
+                # charProperties 섹션 전체 교체
                 header_content = (
                     header_content[:para_pr_start] + 
                     para_properties +
                     header_content[para_pr_end + len('</hh:paraProperties>'):]
-                )
-
+                )            
+            
                 # 글자 모양 정의 추가
                 char_props_start = header_content.find('<hh:charProperties')
                 char_props_end = header_content.find('</hh:charProperties>')
                 
                 if char_props_start == -1 or char_props_end == -1:
                     raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
+            
 
-                # 새로운 글자 모양 정의
-                char_props = '''<hh:charProperties itemCnt="9">
+                # 글자 모양 정의
+                char_props = '''<hh:charProperties itemCnt="13">
                     <hh:charPr id="0" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
-                        <hh:fontRef hangul="2" latin="2" hanja="2" japanese="2" other="2" symbol="2" user="2"/>
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
@@ -935,12 +1312,13 @@ class HWPDocument:
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="2" height="900" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="2" height="1600" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
                     </hh:charPr>
                     <hh:charPr id="3" height="1400" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
@@ -950,36 +1328,69 @@ class HWPDocument:
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:bold/>
                     </hh:charPr>
-                    <hh:charPr id="4" height="1400" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="4" height="1200" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
-                        <hh:spacing hangul="-5" latin="-5" hanja="-5" japanese="-5" other="-5" symbol="-5" user="-5"/>
+                        <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
                     </hh:charPr>
-                    <hh:charPr id="5" height="1200" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="5" height="1100" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
+                        <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
+                    </hh:charPr>
+                    <hh:charPr id="6" height="1000" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
+                        <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
+                    </hh:charPr>
+                    <hh:charPr id="7" height="900" textColor="#2E74B5" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
+                        <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
+                    </hh:charPr>
+                    <hh:charPr id="8" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="6" height="1000" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                    <hh:charPr id="9" height="2400" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="9" latin="9" hanja="9" japanese="9" other="9" symbol="9" user="9"/>
+                        <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
+                        <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                        <hh:bold/>
+                    </hh:charPr>
+                    <hh:charPr id="10" height="1200" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
                         <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="7" height="900" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
-                        <hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                    <hh:charPr id="11" height="2400" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="9" latin="9" hanja="9" japanese="9" other="9" symbol="9" user="9"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:offset hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                     </hh:charPr>
-                    <hh:charPr id="8" height="800" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
-                        <hh:fontRef hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
+                    <hh:charPr id="12" height="1200" textColor="#000000" shadeColor="none" useFontSpace="0" useKerning="0" symMark="NONE" borderFillIDRef="2">
+                        <hh:fontRef hangul="1" latin="1" hanja="1" japanese="1" other="1" symbol="1" user="1"/>
                         <hh:ratio hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
                         <hh:spacing hangul="0" latin="0" hanja="0" japanese="0" other="0" symbol="0" user="0"/>
                         <hh:relSz hangul="100" latin="100" hanja="100" japanese="100" other="100" symbol="100" user="100"/>
@@ -1003,36 +1414,291 @@ class HWPDocument:
                     raise ValueError("header.xml 파일의 구조가 올바르지 않습니다.")
 
                 # 새로운 테두리 스타일 정의
-                border_fills = '''<hh:borderFills itemCnt="3">
+                border_fills = '''<hh:borderFills itemCnt="25">
                     <hh:borderFill id="1" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
-                        <hh:slash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:topBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:topBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:bottomBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
                     </hh:borderFill>
                     <hh:borderFill id="2" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
-                        <hh:slash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:topBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:bottomBorder type="NONE" width="0.1 mm" color="#000000"/>
-                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:topBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:bottomBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
                         <hc:fillBrush>
-                            <hc:winBrush faceColor="none" hatchColor="#999999" alpha="0"/>
+                            <hc:winBrush faceColor="none" hatchColor="#999999" alpha="0" />
                         </hc:fillBrush>
                     </hh:borderFill>
                     <hh:borderFill id="3" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
-                        <hh:slash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:backSlash type="NONE" Crooked="0" isCounter="0"/>
-                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#000000"/>
-                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#000000"/>
-                        <hh:topBorder type="SOLID" width="0.12 mm" color="#000000"/>
-                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000"/>
-                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000"/>
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                    </hh:borderFill>
+                    <hh:borderFill id="4" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="5" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="6" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:topBorder type="SOLID" width="0.4 mm" color="#5D83B0" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#CDD8E5" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#ADBFD5" hatchColor="#ADBFD5" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="7" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:rightBorder type="NONE" width="0.1 mm" color="#000000" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#CDD8E5" />
+                        <hh:bottomBorder type="SOLID" width="0.4 mm" color="#5D83B0" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="8" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="9" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="10" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="11" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#5D5D5D" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#5D5D5D" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#5D5D5D" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="12" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="13" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="14" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="15" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="16" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="17" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="18" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.5 mm" color="#353535" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="19" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FFFFFF" />
+                        <hh:bottomBorder type="SOLID" width="0.5 mm" color="#353535" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#DCDCDC" hatchColor="#DCDCDC" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="20" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:rightBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="21" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="NONE" width="0.12 mm" color="#353535" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#D6D6D6" />
+                        <hh:topBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:bottomBorder type="SOLID" width="0.7 mm" color="#353535" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#FFFFFF" hatchColor="#FFFFFF" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="22" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#0000FF" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#0000FF" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#0000FF" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#0000FF" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                    </hh:borderFill>
+                    <hh:borderFill id="23" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#000000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                        <hc:fillBrush>
+                            <hc:winBrush faceColor="#D9D9D9" hatchColor="#000000" alpha="0" />
+                        </hc:fillBrush>
+                    </hh:borderFill>
+                    <hh:borderFill id="24" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.12 mm" color="#FF0000" />
+                        <hh:rightBorder type="SOLID" width="0.12 mm" color="#FF0000" />
+                        <hh:topBorder type="SOLID" width="0.12 mm" color="#FF0000" />
+                        <hh:bottomBorder type="SOLID" width="0.12 mm" color="#FF0000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
+                    </hh:borderFill>
+                    <hh:borderFill id="25" threeD="0" shadow="0" centerLine="NONE" breakCellSeparateLine="0">
+                        <hh:slash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:backSlash type="NONE" Crooked="0" isCounter="0" />
+                        <hh:leftBorder type="SOLID" width="0.4 mm" color="#000000" />
+                        <hh:rightBorder type="SOLID" width="0.4 mm" color="#000000" />
+                        <hh:topBorder type="SOLID" width="0.4 mm" color="#000000" />
+                        <hh:bottomBorder type="SOLID" width="0.4 mm" color="#000000" />
+                        <hh:diagonal type="SOLID" width="0.1 mm" color="#000000" />
                     </hh:borderFill>
                 </hh:borderFills>'''
 
@@ -1095,6 +1761,51 @@ class HWPDocument:
                 # XML 네임스페이스와 기본 설정 보존
                 header = content[body_start:first_p_end]
                 
+                # 문단 스타일 정의 추가
+                header_xml_path = os.path.join(temp_dir, 'Contents', 'header.xml')
+                with open(header_xml_path, 'r', encoding='utf-8') as f:
+                    header_xml = f.read()
+                
+                # 문단 스타일 정의 위치 찾기
+                para_pr_list_start = header_xml.find('<hh:paraStyleList>')
+                para_pr_list_end = header_xml.find('</hh:paraStyleList>')
+                
+                if para_pr_list_start != -1 and para_pr_list_end != -1:
+                    # 기존 문단 스타일 목록에 새 스타일 추가
+                    para_style_definitions = '''
+                    <hh:paraStyle id="1" name="오른쪽정렬" paraPrIDRef="1" charPrIDRef="0" nextStyleIDRef="1" />
+                    <hh:paraStyle id="2" name="가운데정렬" paraPrIDRef="2" charPrIDRef="0" nextStyleIDRef="2" />
+                    '''
+                    
+                    # 문단 스타일 목록에 추가
+                    header_xml = header_xml[:para_pr_list_end] + para_style_definitions + header_xml[para_pr_list_end:]
+                    
+                    # 문단 속성 정의 위치 찾기
+                    para_pr_def_start = header_xml.find('<hh:paraPrList>')
+                    para_pr_def_end = header_xml.find('</hh:paraPrList>')
+                    
+                    if para_pr_def_start != -1 and para_pr_def_end != -1:
+                        # 문단 속성 정의 추가
+                        para_pr_definitions = '''
+                        <hh:paraPr id="1">
+                            <hh:margin left="0" right="0" prev="0" next="0" />
+                            <hh:lineSpacing type="PERCENT" value="160" />
+                            <hh:align horizontal="RIGHT" />
+                        </hh:paraPr>
+                        <hh:paraPr id="2">
+                            <hh:margin left="0" right="0" prev="0" next="0" />
+                            <hh:lineSpacing type="PERCENT" value="160" />
+                            <hh:align horizontal="CENTER" />
+                        </hh:paraPr>
+                        '''
+                        
+                        # 문단 속성 목록에 추가
+                        header_xml = header_xml[:para_pr_def_end] + para_pr_definitions + header_xml[para_pr_def_end:]
+                        
+                        # 수정된 header.xml 저장
+                        with open(header_xml_path, 'w', encoding='utf-8') as f:
+                            f.write(header_xml)
+                
                 # 새로운 본문 내용 생성
                 new_body = header
                 
@@ -1107,16 +1818,59 @@ class HWPDocument:
                     
                     if element_type == 'paragraph':
                         char_pr_id = extra.get('char_pr_id', "0")
+                        
+                        # 정렬 옵션 처리
+                        align_option = "JUSTIFY"  # 기본값
+                        para_pr_id = "0"  # 기본 문단 스타일
+                        
+                        # para_pr_id가 직접 지정된 경우 사용
+                        if 'para_pr_id' in extra:
+                            para_pr_id = extra['para_pr_id']
+                            # para_pr_id에 따른 정렬 옵션 설정
+                            if para_pr_id == "1":
+                                align_option = "RIGHT"
+                            elif para_pr_id == "2":
+                                align_option = "CENTER"
+                            elif para_pr_id == "10":
+                                align_option = "LEFT"
+                            elif para_pr_id == "11":
+                                align_option = "CENTER"
+                            elif para_pr_id == "12":
+                                align_option = "RIGHT"
+                        # 정렬 옵션으로 para_pr_id 설정
+                        elif 'align' in extra:
+                            align_value = extra['align'].upper() if isinstance(extra['align'], str) else extra['align']
+                            if align_value in ['LEFT', 'CENTER', 'RIGHT', 'JUSTIFY']:
+                                align_option = align_value
+                                # 정렬에 따른 문단 스타일 ID 설정
+                                if align_value == 'CENTER':
+                                    para_pr_id = "2"  # 가운데 정렬 문단 스타일
+                                elif align_value == 'RIGHT':
+                                    para_pr_id = "1"  # 오른쪽 정렬 문단 스타일
+                            elif isinstance(align_value, str) and align_value.lower() in ['left', 'center', 'right', 'justify']:
+                                align_option = align_value.upper()
+                                # 정렬에 따른 문단 스타일 ID 설정 (수정: 가운데와 오른쪽 정렬 매핑 변경)
+                                if align_value.lower() == 'center':
+                                    para_pr_id = "2"  # 가운데 정렬 문단 스타일
+                                elif align_value.lower() == 'right':
+                                    para_pr_id = "1"  # 오른쪽 정렬 문단 스타일
+                        
                         # 각 줄을 별도의 문단으로 처리
                         if content_data:
                             for line in content_data.split('\n'):
+                                # 문단 스타일 ID에 따라 정렬 옵션 설정 (수정: 가운데와 오른쪽 정렬 매핑 변경)
+                                if para_pr_id == "2":
+                                    align_option = "CENTER"
+                                elif para_pr_id == "1":
+                                    align_option = "RIGHT"
+                                
                                 paragraph_xml = f'''
-                                <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
+                                <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="{para_pr_id}" styleIDRef="{para_pr_id}">
                                     <hp:pPr>
                                         <hp:margin left="0" right="0" prev="200" next="200"/>
                                         <hp:lineSpacing type="PERCENT" value="120"/>
                                         <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
-                                        <hp:align horizontal="JUSTIFY"/>
+                                        <hp:align horizontal="{align_option}"/>
                                     </hp:pPr>
                                     <hp:run charPrIDRef="{char_pr_id}">
                                         <hp:t>{line}</hp:t>
@@ -1130,13 +1884,19 @@ class HWPDocument:
                                 new_body += paragraph_xml
                         else:
                             # 빈 문단 처리
+                            # 문단 스타일 ID에 따라 정렬 옵션 설정 (수정: 가운데와 오른쪽 정렬 매핑 변경)
+                            if para_pr_id == "2":
+                                align_option = "CENTER"
+                            elif para_pr_id == "1":
+                                align_option = "RIGHT"
+                                
                             paragraph_xml = f'''
-                            <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="0">
+                            <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="{para_pr_id}" styleIDRef="{para_pr_id}">
                                 <hp:pPr>
                                     <hp:margin left="0" right="0" prev="200" next="200"/>
                                     <hp:lineSpacing type="PERCENT" value="120"/>
                                     <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
-                                    <hp:align horizontal="JUSTIFY"/>
+                                    <hp:align horizontal="{align_option}"/>
                                 </hp:pPr>
                                 <hp:run charPrIDRef="{char_pr_id}">
                                     <hp:t></hp:t>
@@ -1150,17 +1910,19 @@ class HWPDocument:
                             new_body += paragraph_xml
                     
                     elif element_type == 'heading':
-                        heading_style = extra.get('size', "8")
-                        # print(f"[DEBUG] Processing heading: '{content_data}' with style: {heading_style}")
+                        heading_style = extra.get('style', "2")
+                        char_pr_id = extra.get('charPrIDRef', heading_style)  # 글자 모양 ID 가져오기
+                        # 문서 제목(style 2)인 경우 가운데 정렬, 그 외는 왼쪽 정렬
+                        align = 'CENTER' if heading_style == '2' else 'LEFT'
                         heading_xml = f'''
-                        <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="0" styleIDRef="{heading_style}">
+                        <hp:p pageBreak="{1 if page_break else 0}" paraPrIDRef="{heading_style}" styleIDRef="{heading_style}">
                             <hp:pPr>
                                 <hp:margin left="0" right="0" prev="425" next="425"/>
                                 <hp:lineSpacing type="PERCENT" value="160"/>
                                 <hp:lineWrap type="BREAK_WORD_BREAK_HANGUL"/>
-                                <hp:align horizontal="JUSTIFY"/>
+                                <hp:align horizontal="{align}"/>
                             </hp:pPr>
-                            <hp:run charPrIDRef="{heading_style}">
+                            <hp:run charPrIDRef="{char_pr_id}">
                                 <hp:t>{content_data}</hp:t>
                             </hp:run>
                             <hp:linesegarray>
@@ -1176,33 +1938,23 @@ class HWPDocument:
                         image_count += 1
                         image_path = content_data
                         
+                        # 이미지 파일 복사 및 변환
+                        img = Image.open(image_path)
+                        img = HWPDocument._convert_image_to_rgb(img)  # RGB로 변환
+                        
+                        # 이미지 크기 계산 (A4 용지 기준 적절한 크기로 조정)
+                        img_width, img_height = img.size
+                        
                         # 이미지 크기 설정 (extra에서 가져오거나 기본값 사용)
                         img_options = extra if extra else {}
                         custom_width = img_options.get('width', 41550)  # 기본값: A4 용지 너비에 맞춤
-                        custom_height = img_options.get('height', 0)
-                        
-                        # 이미지 파일 복사 및 변환
-                        img = Image.open(image_path)
-                        # RGBA나 P 모드인 경우 RGB로 변환
-                        if img.mode in ('RGBA', 'P', 'LA'):
-                            background = Image.new('RGB', img.size, (255, 255, 255))
-                            if img.mode in ('RGBA', 'LA'):
-                                background.paste(img, mask=img.split()[-1])
-                            else:
-                                background.paste(img)
-                            img = background
-                        elif img.mode != 'RGB':
-                            img = img.convert('RGB')
+                        # 높이는 원본 비율 유지
+                        custom_height = img_options.get('height', int(custom_width * (img_height / img_width)))
                         
                         # 원본 이미지 확장자 유지
                         _, ext = os.path.splitext(image_path)
                         img_filename = f'image{image_count}{ext.lower()}'
                         img.save(os.path.join(bindata_dir, img_filename))
-
-                        # 이미지 크기 계산 (A4 용지 기준 적절한 크기로 조정)
-                        img_width, img_height = img.size
-                        width = custom_width if custom_width else 41550  # A4 용지 너비에 맞춤
-                        height = custom_height if custom_height else int(width * (img_height / img_width))
 
                         # content.hpf에 이미지 항목 추가
                         media_type = f"image/{ext[1:].lower()}"
@@ -1223,10 +1975,10 @@ class HWPDocument:
                                        lock="0" dropcapstyle="None" href="" groupLevel="0" 
                                        instid="{682337706 + image_count}" reverse="0">
                                     <hp:offset x="0" y="0"/>
-                                    <hp:orgSz width="{width}" height="{height}"/>
+                                    <hp:orgSz width="{custom_width}" height="{custom_height}"/>
                                     <hp:curSz width="0" height="0"/>
                                     <hp:flip horizontal="0" vertical="0"/>
-                                    <hp:rotationInfo angle="0" centerX="{width//2}" centerY="{height//2}" 
+                                    <hp:rotationInfo angle="0" centerX="{custom_width//2}" centerY="{custom_height//2}" 
                                                     rotateimage="1"/>
                                     <hp:renderingInfo>
                                         <hc:transMatrix e1="1" e2="0" e3="0" e4="0" e5="1" e6="0"/>
@@ -1235,20 +1987,20 @@ class HWPDocument:
                                     </hp:renderingInfo>
                                     <hp:imgRect>
                                         <hc:pt0 x="0" y="0"/>
-                                        <hc:pt1 x="{width}" y="0"/>
-                                        <hc:pt2 x="{width}" y="{height}"/>
-                                        <hc:pt3 x="0" y="{height}"/>
+                                        <hc:pt1 x="{custom_width}" y="0"/>
+                                        <hc:pt2 x="{custom_width}" y="{custom_height}"/>
+                                        <hc:pt3 x="0" y="{custom_height}"/>
                                     </hp:imgRect>
                                     <hp:imgClip left="0" right="96000" top="0" bottom="77400"/>
                                     <hp:inMargin left="0" right="0" top="0" bottom="0"/>
                                     <hc:img binaryItemIDRef="image{image_count}" bright="0" contrast="0" 
                                            effect="REAL_PIC" alpha="0"/>
                                     <hp:effects/>
-                                    <hp:sz width="{width}" widthRelTo="ABSOLUTE" height="{height}" 
+                                    <hp:sz width="{custom_width}" widthRelTo="ABSOLUTE" height="{custom_height}" 
                                           heightRelTo="ABSOLUTE" protect="0"/>
                                     <hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" 
                                            allowOverlap="1" holdAnchorAndSO="0" vertRelTo="PARA" 
-                                           horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" 
+                                           horzRelTo="PARA" vertAlign="TOP" horzAlign="CENTER" 
                                            vertOffset="0" horzOffset="0"/>
                                     <hp:outMargin left="0" right="0" top="0" bottom="0"/>
                                     <hp:shapeComment>그림입니다.</hp:shapeComment>
@@ -1263,10 +2015,14 @@ class HWPDocument:
                         new_body += image_xml
 
                     elif element_type == 'table':
-                        # 표 데이터
-                        table_data = content_data
+                        table_data, page_break, options = content_data, page_break, extra
                         row_count = len(table_data)
                         col_count = len(table_data[0])
+                        style = options.get("style", {
+                            "borderFillIDRef": "3",
+                            "cellBorderFillIDRef": "3",
+                            "headerFillIDRef": "3"
+                        })
                         
                         # 표 XML 시작
                         table_xml = f'''
@@ -1276,12 +2032,12 @@ class HWPDocument:
                                        textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" 
                                        dropcapstyle="None" pageBreak="CELL" repeatHeader="1" 
                                        rowCnt="{row_count}" colCnt="{col_count}" cellSpacing="0" 
-                                       borderFillIDRef="3" noAdjust="0">
+                                       borderFillIDRef="{style['borderFillIDRef']}" noAdjust="0">
                                     <hp:sz width="42520" widthRelTo="ABSOLUTE" height="5000" 
                                           heightRelTo="ABSOLUTE" protect="0"/>
                                     <hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" 
                                            allowOverlap="1" holdAnchorAndSO="0" vertRelTo="PARA" 
-                                           horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" 
+                                           horzRelTo="PARA" vertAlign="TOP" horzAlign="{options.get('align', 'CENTER')}" 
                                            vertOffset="0" horzOffset="0"/>
                                     <hp:outMargin left="283" right="283" top="283" bottom="283"/>
                                     <hp:inMargin left="510" right="510" top="141" bottom="141"/>'''
@@ -1292,22 +2048,35 @@ class HWPDocument:
                             for col_idx, cell in enumerate(row):
                                 table_xml += f'''
                                     <hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" 
-                                          dirty="0" borderFillIDRef="3">
+                                          dirty="0" borderFillIDRef="{
+                                            options.get('header_style') if row_idx == 0 and options.get('header_style') else style['cellBorderFillIDRef']
+                                          }">
                                         <hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" 
                                                    vertAlign="CENTER" linkListIDRef="0" 
                                                    linkListNextIDRef="0" textWidth="0" textHeight="0" 
                                                    hasTextRef="0" hasNumRef="0">
-                                            <hp:p paraPrIDRef="0" styleIDRef="0" pageBreak="0" 
-                                                 columnBreak="0" merged="0">
-                                                <hp:run charPrIDRef="0">
+                                            <hp:p paraPrIDRef="{
+                                                '0' if options.get('text_align', 'CENTER') == 'LEFT' else 
+                                                '1' if options.get('text_align', 'CENTER') == 'RIGHT' else 
+                                                '2'
+                                            }" styleIDRef="{
+                                                '0' if options.get('text_align', 'CENTER') == 'LEFT' else 
+                                                '1' if options.get('text_align', 'CENTER') == 'RIGHT' else 
+                                                '2'
+                                            }" pageBreak="0" columnBreak="0" merged="0">
+                                                <hp:pPr>
+                                                    <hp:align horizontal="{options.get('text_align', 'CENTER')}"/>
+                                                    <hp:margin left="0" right="0" prev="300" next="300"/>
+                                                </hp:pPr>
+                                                <hp:run charPrIDRef="1">
                                                     <hp:t>{str(cell)}</hp:t>
                                                 </hp:run>
                                             </hp:p>
                                         </hp:subList>
                                         <hp:cellAddr colAddr="{col_idx}" rowAddr="{row_idx}"/>
                                         <hp:cellSpan colSpan="1" rowSpan="1"/>
-                                        <hp:cellSz width="{42520 // col_count}" height="1000"/>
-                                        <hp:cellMargin left="510" right="510" top="141" bottom="141"/>
+                                        <hp:cellSz width="{42520 // col_count}" height="2000"/>
+                                        <hp:cellMargin left="510" right="510" top="300" bottom="300"/>
                                     </hp:tc>'''
                             table_xml += '</hp:tr>'
 
@@ -1318,6 +2087,20 @@ class HWPDocument:
                         </hp:p>'''
                         
                         new_body += table_xml
+
+                    elif element_type == 'field':
+                        if content == 'page_number':
+                            # 페이지 번호 필드 추가
+                            # HWPX 필드 코드 형식으로 변환
+                            pass
+                        elif content == 'page_ref':
+                            # 페이지 참조 필드 추가
+                            # HWPX 필드 코드 형식으로 변환
+                            pass
+                    elif element_type == 'bookmark':
+                        # 북마크 추가
+                        # HWPX 북마크 형식으로 변환
+                        pass
 
                 new_body += '</hs:sec>'
 
@@ -1355,395 +2138,829 @@ class HWPDocument:
                             arc_name = os.path.relpath(file_path, temp_dir)
                             output_zip.write(file_path, arc_name)
 
+            # 임시 파일 정리
+            for temp_file in self._temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                except Exception as e:
+                    print(f"Warning: Failed to delete temp file {temp_file}: {e}")
+            self._temp_files.clear()  # 리스트 비우기
+
             return True
         except Exception as e:
-            print(f"Error saving document: {str(e)}")
-            return False
+            raise print(f"문서 저장 중 오류 발생: {str(e)}")
+
+    def add_field(self, field_type: str, bookmark: str = None) -> None:
+        """문서에 필드 코드 추가
+        
+        Args:
+            field_type (str): 필드 타입 (page_ref, page_number 등)
+            bookmark (str, optional): 참조할 북마크 이름
+        """
+        try:
+            # HWPX 필드 코드 형식에 맞게 구성
+            if field_type == "page_ref" and bookmark:
+                field_code = f"{{REF {bookmark} \\p}}"  # 페이지 참조 필드
+            elif field_type == "page_number":
+                field_code = "{PAGE}"  # 현재 페이지 번호
+            else:
+                raise ValueError(f"지원하지 않는 필드 타입: {field_type}")
+            
+            # 필드 코드를 포함하는 문단 추가
+            self.add_paragraph(field_code, options={
+                'font_name': '맑은 고딕',
+                'font_size': 10,
+                'field_code': True  # 필드 코드임을 표시
+            })
+            
+        except Exception as e:
+            print(f"필드 추가 실패: {str(e)}")
+            raise
+    
+    def add_bookmark(self, bookmark_name: str) -> None:
+        """문서에 북마크 추가
+        
+        Args:
+            bookmark_name (str): 북마크 이름
+        """
+        try:
+            # HWPX 북마크 형식에 맞게 구성
+            bookmark_code = f"{{BM={bookmark_name}}}"
+            
+            # 북마크 코드 추가
+            self.add_paragraph(bookmark_code, options={
+                'bookmark': True  # 북마크임을 표시
+            })
+            
+        except Exception as e:
+            print(f"북마크 추가 실패: {str(e)}")
+            raise
+
+    def add_styled_paragraph(self, text: str, style: str = 'normal', page_break: bool = False, additional_options: Dict = None) -> None:
+        """미리 정의된 스타일을 사용하여 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            style (str): 사용할 스타일 이름 
+                - 'normal': 기본 스타일
+                - 'large': 큰 글씨
+                - 'medium': 중간 글씨
+                - 'center': 가운데 정렬
+                - 'right': 오른쪽 정렬
+                - 'medium_center': 중간 글씨 가운데 정렬
+                - 'medium_right': 중간 글씨 오른쪽 정렬
+                - 'large_center': 큰 글씨 가운데 정렬
+                - 'large_right': 큰 글씨 오른쪽 정렬
+                - 'emphasis': 강조 (굵게)
+                - 'quote': 인용문 (들여쓰기)
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션 (기본 스타일에 추가로 적용)
+        """
+        if style not in self.paragraph_styles:
+            raise ValueError(f"지원하지 않는 스타일입니다: {style}. 사용 가능한 스타일: {', '.join(self.paragraph_styles.keys())}")
+            
+        # 기본 스타일 옵션 가져오기
+        options = self.paragraph_styles[style].copy()
+        
+        # 추가 옵션 적용
+        if additional_options:
+            options.update(additional_options)
+            
+        # 문단 추가
+        self.add_paragraph(text, page_break=page_break, options=options)
+        
+    def add_large_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """큰 글씨 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="large", page_break=page_break, additional_options=additional_options)
+        
+    def add_centered_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """가운데 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="center", page_break=page_break, additional_options=additional_options)
+        
+    def add_large_centered_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """큰 글씨 가운데 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="large_center", page_break=page_break, additional_options=additional_options)
+        
+    def add_emphasized_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """강조(굵게) 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="emphasis", page_break=page_break, additional_options=additional_options)
+        
+    def add_quote(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """인용문 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="quote", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 글씨 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_centered_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 글씨 가운데 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium_center", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_right_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 글씨 오른쪽 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium_right", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_bold_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 크기 굵은체 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium_bold", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_bold_centered_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 크기 굵은체 가운데 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium_bold_center", page_break=page_break, additional_options=additional_options)
+        
+    def add_medium_bold_right_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """중간 크기 굵은체 오른쪽 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="medium_bold_right", page_break=page_break, additional_options=additional_options)
+        
+    def add_large_normal_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """큰 글씨 보통체 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="large_normal", page_break=page_break, additional_options=additional_options)
+        
+    def add_large_normal_centered_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """큰 글씨 보통체 가운데 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="large_normal_center", page_break=page_break, additional_options=additional_options)
+        
+    def add_large_normal_right_text(self, text: str, page_break: bool = False, additional_options: Dict = None) -> None:
+        """큰 글씨 보통체 오른쪽 정렬 스타일로 문단 추가
+        
+        Args:
+            text (str): 추가할 텍스트
+            page_break (bool): 페이지 나누기 여부
+            additional_options (Dict, optional): 추가 옵션
+        """
+        self.add_styled_paragraph(text, style="large_normal_right", page_break=page_break, additional_options=additional_options)
 
 class PDFDocument:
     def __init__(self):
         try:
-            self.font_path = safe_path_join(os.path.expanduser("~"), ".airun", "NotoSansKR-Regular.ttf")
+            self.font_path = safe_path_join(os.path.expanduser("~"), ".airun", "Pretendard-Regular.ttf")
+            self.font_path_bold = safe_path_join(os.path.expanduser("~"), ".airun", "Pretendard-Bold.ttf")
             if not os.path.exists(self.font_path):
                 raise FileNotFoundError(f"Font file not found: {self.font_path}")
+            if not os.path.exists(self.font_path_bold):
+                raise FileNotFoundError(f"Font file not found: {self.font_path_bold}")
             
-            # 폰트 등록
-            pdfmetrics.registerFont(TTFont('NotoSansKR', self.font_path))
+            # font registration
+            pdfmetrics.registerFont(TTFont('Pretendard', self.font_path))
+            pdfmetrics.registerFont(TTFont('Pretendard-Bold', self.font_path_bold))
             
-            # 임시 PDF 생성
-            self.buffer = io.BytesIO()
-            self.pdf = canvas.Canvas(self.buffer, pagesize=A4)
-            self.pdf.setFont('NotoSansKR', 10)
+            # 폰트 패밀리 등록
+            pdfmetrics.registerFontFamily(
+                'Pretendard',
+                normal='Pretendard',
+                bold='Pretendard-Bold'
+            )
             
-            # 페이지 크기 설정
-            self.width, self.height = A4
-            self.margin = 50  # 여백
-            self.y = self.height - self.margin  # 현재 y 위치
+            self.elements = []
             
-            # 첫 페이지 자동 생성 (빈 페이지 방지)
-            self.first_page = True
+            # 스타일 설정
+            self.styles = getSampleStyleSheet()
+            
+            # 기본 스타일 복사 및 한글 폰트 적용
+            self.styles.add(ParagraphStyle(
+                name='Korean',
+                parent=self.styles['Normal'],
+                fontName='Pretendard',
+                fontSize=10,
+                leading=15,
+                encoding='utf-8',  # 인코딩 명시적 지정
+                wordWrap='CJK'     # CJK 워드랩 사용
+            ))
+            
+            # 제목 레벨별 크기 설정
+            heading_sizes = {
+                1: {'fontSize': 16, 'leading': 24, 'spaceBefore': 20, 'spaceAfter': 10},
+                2: {'fontSize': 14, 'leading': 21, 'spaceBefore': 15, 'spaceAfter': 8},
+                3: {'fontSize': 12, 'leading': 18, 'spaceBefore': 12, 'spaceAfter': 6},
+                4: {'fontSize': 10, 'leading': 15, 'spaceBefore': 10, 'spaceAfter': 5},
+                5: {'fontSize': 10, 'leading': 12, 'spaceBefore': 8, 'spaceAfter': 4}
+            }
+            
+            # 기존 Heading 스타일을 유지하면서 한글 제목 스타일 추가
+            for level, sizes in heading_sizes.items():
+                # 기존 Heading 스타일 수정
+                heading_style = self.styles[f'Heading{level}']
+                heading_style.fontSize = sizes['fontSize']
+                heading_style.leading = sizes['leading']
+                heading_style.spaceBefore = sizes['spaceBefore']
+                heading_style.spaceAfter = sizes['spaceAfter']
+                
+                # 한글 제목 스타일 추가
+                self.styles.add(ParagraphStyle(
+                    name=f'KoreanHeading{level}',
+                    parent=heading_style,  # 기존 Heading 스타일 상속
+                    fontName='Pretendard-Bold',
+                    fontSize=sizes['fontSize'],  # 레벨별 폰트 크기
+                    leading=sizes['leading'],    # 레벨별 줄간격
+                    spaceBefore=sizes['spaceBefore'],  # 레벨별 상단 여백
+                    spaceAfter=sizes['spaceAfter'],    # 레벨별 하단 여백
+                    alignment=heading_style.alignment  # 기존 정렬 유지
+                ))
+            
+            # 목차 초기화
+            self.toc = TableOfContents()
+            self.toc.dotsMinLevel = 0  # 모든 레벨에 점선 표시
+            
+            # 목차 스타일 설정
+            for i in range(1, 4):
+                toc_style = ParagraphStyle(
+                    name=f'TOCHeading{i}',
+                    parent=self.styles[f'KoreanHeading{i}'],
+                    fontName='Pretendard',
+                    fontSize=12 - (i-1),  # 목차 항목 크기: 12pt, 11pt, 10pt
+                    leading=16,           # 목차 줄간격
+                    leftIndent=20*(i-1),  # 들여쓰기
+                    firstLineIndent=0,
+                    spaceBefore=3,
+                    spaceAfter=3
+                )
+                self.styles.add(toc_style)
+            
+            self.toc.levelStyles = [
+                self.styles[f'TOCHeading{i}'] for i in range(1, 4)
+            ]
+            
+            # 머릿말/꼬릿말 설정
+            self.header_text = ""
+            self.footer_text = ""
+            self.header_align = "left"
+            self.footer_align = "left"
             
         except Exception as e:
             print(f"[ERROR] Failed to initialize PDF document: {str(e)}")
             raise
-            
-    def add_page(self):
-        """Add a new page to the PDF document."""
-        if not self.first_page:  # 첫 페이지가 아닐 때만 새 페이지 추가
-            self.pdf.showPage()
-            self.pdf.setFont('NotoSansKR', 10)
-            self.y = self.height - self.margin
-        self.first_page = False  # 첫 페이지 표시 해제
-        
-    def add_content(self, text: str):
-        """Add text content to the current page."""
-        if text is None or not isinstance(text, str):
-            return
-            
-        try:
-            # 텍스트 전처리
-            text = text.strip().replace('\r\n', '\n').replace('\r', '\n')
-            lines = text.split('\n')
-            
-            for line in lines:
-                if line.strip():
-                    # 페이지 넘김 확인
-                    if self.y < self.margin:
-                        self.add_page()
-                    
-                    self.pdf.drawString(self.margin, self.y, line.strip())
-                    self.y -= 15  # 줄간격
-                else:
-                    self.y -= 15  # 빈 줄
-                    
-        except Exception as e:
-            print(f"[WARNING] Failed to add content: {str(e)}")
-            
-    def add_text(self, text: str):
-        """Add text content to the current page."""
-        self.add_content(text)
-        
-    def add_title(self, title: str):
-        """Add a title to the current page."""
-        if title is None or not isinstance(title, str):
-            return
-            
-        try:
-            title = title.strip()
-            if self.first_page:  # 첫 페이지면 add_page() 호출하지 않음
-                self.first_page = False
-            self.pdf.setFont('NotoSansKR', 16)
-            
-            # 중앙 정렬을 위한 텍스트 너비 계산
-            text_width = self.pdf.stringWidth(title, 'NotoSansKR', 16)
-            x = (self.width - text_width) / 2
-            
-            self.pdf.drawString(x, self.y, title)
-            self.y -= 30  # 제목 후 여백
-            
-            self.pdf.setFont('NotoSansKR', 10)
-        except Exception as e:
-            print(f"[WARNING] Failed to add title: {str(e)}")
-            
-    def add_heading(self, text: str):
-        """Add a title to the current page."""
-        self.add_title(text)            
-            
-    def add_subtitle(self, subtitle: str):
-        """Add a subtitle to the current page."""
-        if subtitle is None or not isinstance(subtitle, str):
-            return
-            
-        try:
-            subtitle = subtitle.strip()
-            self.pdf.setFont('NotoSansKR', 14)
-            self.pdf.drawString(self.margin, self.y, subtitle)
-            self.y -= 25  # 부제목 후 여백
-            
-            self.pdf.setFont('NotoSansKR', 10)
-        except Exception as e:
-            print(f"[WARNING] Failed to add subtitle: {str(e)}")
-            
-    def add_image(self, image_path: str, x: float = None, y: float = None, w: float = 0, h: float = 0):
-        """Add an image to the PDF document.
-        
-        Args:
-            image_path: Path to image file or URL
-            x: X coordinate (if None, will be centered)
-            y: Y coordinate (if None, will use current y position)
-            w: Width in points (if 0, will use scaled image width)
-            h: Height in points (if 0, will use scaled image height)
-        """
-        try:
-            img_temp = None
-            temp_path = None
-            
-            # URL인 경우 다운로드
-            if isinstance(image_path, str) and urllib.parse.urlparse(image_path).scheme in ('http', 'https'):
-                # SVG URL인 경우 처리
-                if image_path.lower().endswith('.svg'):
-                    try:
-                        temp_fd, temp_path = tempfile.mkstemp(suffix='.png')
-                        os.close(temp_fd)
-                        cairosvg.url_to_png(url=image_path, write_to=temp_path)
-                        image_path = temp_path
-                    except Exception as svg_error:
-                        print(f"[WARNING] SVG URL 처리 실패: {str(svg_error)}")
-                        return
-                else:
-                    response = requests.get(image_path)
-                    if response.status_code != 200:
-                        raise Exception(f"Failed to download image: {response.status_code}")
-                    img_data = response.content
-                    img_temp = Image.open(io.BytesIO(img_data))
-                    img_temp = convert_image_to_rgb(img_temp)
-            # 로컬 파일인 경우
-            else:
-                # SVG 파일인 경우 처리
-                if image_path.lower().endswith('.svg'):
-                    try:
-                        temp_fd, temp_path = tempfile.mkstemp(suffix='.png')
-                        os.close(temp_fd)
-                        cairosvg.svg2png(url=image_path, write_to=temp_path)
-                        image_path = temp_path
-                        img_temp = Image.open(temp_path)
-                    except Exception as svg_error:
-                        print(f"[WARNING] SVG 파일 처리 실패: {str(svg_error)}")
-                        return
-                else:
-                    img_temp = Image.open(image_path)
-                    img_temp = convert_image_to_rgb(img_temp)
-            
-            # 이미지가 없는 경우 처리
-            if not img_temp and not os.path.exists(image_path):
-                raise FileNotFoundError(f"Image not found: {image_path}")
-            
-            # 이미지 크기 계산
-            if not img_temp:
-                img_temp = Image.open(image_path)
-                img_temp = convert_image_to_rgb(img_temp)
-            
-            # 픽셀 크기를 포인트로 변환 (PDF 포인트는 1/72 인치)
-            POINTS_PER_INCH = 72.0
-            
-            # 이미지의 실제 크기를 계산 (픽셀)
-            img_w_px, img_h_px = img_temp.size
-            
-            # 기본 크기 계산 (픽셀을 포인트로 변환)
-            img_w = img_w_px * POINTS_PER_INCH / 96  # 96 DPI를 기준으로 변환
-            img_h = img_h_px * POINTS_PER_INCH / 96
-            
-            # 크기가 지정되지 않은 경우 원본 크기 사용 (최대 페이지 너비의 90%로 제한)
-            if w == 0 and h == 0:
-                max_w = (self.width - 2 * self.margin) * 0.9
-                if img_w > max_w:
-                    scale = max_w / img_w
-                    w = img_w * scale
-                    h = img_h * scale
-                else:
-                    w = img_w
-                    h = img_h
-            # 너비만 지정된 경우 비율 유지
-            elif h == 0 and w > 0:
-                h = w * (img_h / img_w)
-            # 높이만 지정된 경우 비율 유지
-            elif w == 0 and h > 0:
-                w = h * (img_w / img_h)
-            
-            # x 좌표가 지정되지 않은 경우 중앙 정렬
-            if x is None:
-                x = (self.width - w) / 2
-            else:
-                x = max(self.margin, min(x, self.width - self.margin - w))
-            
-            # y 좌표가 지정되지 않은 경우 현재 위치 사용
-            if y is None:
-                # 이미지 위에 여백 추가
-                self.y -= 20
-                y = self.y - h
-            
-            # 이미지가 페이지를 벗어나는지 확인
-            if y < self.margin:
-                self.add_page()
-                # 새 페이지의 상단에 여백을 두고 시작
-                y = self.height - self.margin - h - 20
-            
-            # 이미지 추가
-            if temp_path:
-                self.pdf.drawImage(temp_path, x, y, w, h)
-                os.unlink(temp_path)  # 임시 파일 삭제
-            else:
-                # 임시 파일로 저장
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
-                    img_temp.save(temp_file.name, 'JPEG', quality=95)
-                    
-                    # PDF에 이미지 추가
-                    self.pdf.drawImage(temp_file.name, x, y, w, h)
-                    
-                # 임시 파일 삭제
-                os.unlink(temp_file.name)
-            
-            # 현재 y 위치 업데이트 (이미지 아래에 여백 추가)
-            self.y = y - 30
-            
-        except Exception as e:
-            print(f"[WARNING] Failed to add image: {str(e)}")
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
 
-    def add_paragraph(self, text):
-        """
-        문단을 추가합니다.
+    def _header_footer(self, canvas, doc):
+        canvas.saveState()
         
-        Args:
-            text: 추가할 텍스트
-        """
+        # 머릿말 추가
+        if self.header_text:
+            canvas.setFont('Pretendard', 9)
+            if self.header_align == 'center':
+                canvas.drawCentredString(A4[0]/2, A4[1] - 20*mm, self.header_text)
+            elif self.header_align == 'right':
+                canvas.drawRightString(A4[0] - 20*mm, A4[1] - 20*mm, self.header_text)
+            else:
+                canvas.drawString(20*mm, A4[1] - 20*mm, self.header_text)
+            
+            # 구분선
+            canvas.line(20*mm, A4[1] - 25*mm, A4[0] - 20*mm, A4[1] - 25*mm)
+
+        # 꼬릿말 추가
+        if self.footer_text:
+            canvas.setFont('Pretendard', 9)
+            if self.footer_align == 'center':
+                canvas.drawCentredString(A4[0]/2, 15*mm, self.footer_text)
+            elif self.footer_align == 'right':
+                canvas.drawRightString(A4[0] - 20*mm, 15*mm, self.footer_text)
+            else:
+                canvas.drawString(20*mm, 15*mm, self.footer_text)
+            
+            # 구분선
+            canvas.line(20*mm, 20*mm, A4[0] - 20*mm, 20*mm)
+
+        # 페이지 번호
+        canvas.setFont('Pretendard', 9)
+        canvas.drawCentredString(A4[0]/2, 10*mm, f"- {doc.page} -")
+        
+        canvas.restoreState()
+
+    def set_header(self, text: str, align: str = 'left'):
+        self.header_text = text
+        self.header_align = align
+
+    def set_footer(self, text: str, align: str = 'left'):
+        self.footer_text = text
+        self.footer_align = align
+
+    def add_heading(self, text: str, level: int = 1, align: str = 'left', use_korean: bool = True):
+        """Add a heading to the document and register it in the TOC."""
         if not text:
             return
             
-        try:
-            # 현재 폰트 설정 유지
-            self.pdf.setFont('NotoSansKR', 10)
-            
-            # 텍스트 줄바꿈 처리
-            max_width = self.width - (2 * self.margin)
-            lines = self._wrap_text(text, max_width)
-            
-            for line in lines:
-                # 페이지 넘김 체크
-                if self.y - 15 < self.margin:  # 15는 한 줄의 대략적인 높이
-                    self.add_page()
-                
-                self.pdf.drawString(self.margin, self.y, line)
-                self.y -= 15  # 줄간격
-                
-            self.y -= 10  # 문단 간격
-            
-        except Exception as e:
-            print(f"Error in add_paragraph: {str(e)}")
-
-    def add_table(self, data, header=None):
-        """
-        표를 추가합니다.
+        # 스타일 선택 (한글 또는 기본)
+        style_name = f'KoreanHeading{level}' if use_korean else f'Heading{level}'
+        base_style = self.styles[style_name]
         
-        Args:
-            data: 2차원 리스트 형태의 표 데이터
-            header: 헤더 행 데이터 (옵션)
-        """
-        if not data:
+        # 정렬이 다른 경우 새로운 스타일 생성
+        if align != 'left':
+            style = ParagraphStyle(
+                f'{style_name}_{align}',
+                parent=base_style,
+                alignment=self._get_alignment(align)
+            )
+        else:
+            style = base_style
+        
+        # 제목 추가
+        heading = Paragraph(text, style)
+        self.elements.append(heading)
+        self.elements.append(Spacer(1, 6))
+        
+        # 목차 항목 추가 - 임시로 페이지 번호 1 사용
+        # multiBuild 과정에서 실제 페이지 번호로 업데이트됨
+        self.toc.addEntry(level-1, text, 1)
+
+    def _get_alignment(self, align):
+        if align == 'left':
+            return 0
+        elif align == 'center':
+            return 1
+        elif align == 'right':
+            return 2
+        else:
+            raise ValueError("Invalid alignment format")
+
+    def add_paragraph(self, text: str, font_size: int = 10, align: str = 'left'):
+        """Add content text to the document."""
+        if not text:
             return
             
+    # 마크다운 스타일 강조 문자 제거
+        def clean_markdown(text: str) -> str:
+            # 볼드체 (**text**) 제거
+            text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+            # 이탤릭체 (*text* 또는 _text_) 제거
+            text = re.sub(r'\*(.*?)\*', r'\1', text)
+            text = re.sub(r'_(.*?)_', r'\1', text)
+            # 인라인 코드 (`text`) 제거
+            text = re.sub(r'`(.*?)`', r'\1', text)
+            return text
+        
+        style = ParagraphStyle(
+            'Content',
+            parent=self.styles['Normal'],
+            fontName='Pretendard',
+            fontSize=font_size,
+            leading=font_size * 2.0,
+            alignment={'left': 0, 'center': 1, 'right': 2}[align],
+            spaceAfter=10,
+            leftIndent=10*mm,  # 좌측 여백 추가
+            rightIndent=10*mm  # 우측 여백 추가
+        )
+        
+        # 문단 나누기
+        paragraphs = text.split('\n')
+        for paragraph in paragraphs:
+            if paragraph.strip():
+                # 마크다운 강조 문자 제거 후 Paragraph 객체 생성
+                cleaned_text = clean_markdown(paragraph)
+                p = Paragraph(cleaned_text, style)
+                self.elements.append(p)
+
+    def add_tooltip(self, text: str, header_text: str = "AI.RUN 2025. - Empowering Your AI Journey", font_size: int = 9, background_color=colors.white):
+        """Add a tooltip-style text box with blue border and header.
+        
+        
+        Args:
+            text (str): Text to display in the tooltip
+            font_size (int, optional): Font size for the tooltip text. Defaults to 9.
+            background_color (Color, optional): Background color of the tooltip. Defaults to white.
+        """
         try:
-            # 열 너비 계산
-            num_cols = len(data[0]) if data else 0
-            if header:
-                num_cols = max(num_cols, len(header))
-            
-            if num_cols == 0:
+            if not text:
                 return
                 
-            col_width = (self.width - (2 * self.margin)) / num_cols
-            row_height = 20  # 기본 행 높이
+            # 헤더 스타일 설정
+            header_style = ParagraphStyle(
+                'TooltipHeader',
+                parent=self.styles['Normal'],
+                fontName='Pretendard-Bold',  # 폰트 변경
+                fontSize=font_size,
+                leading=font_size * 1.5,
+                alignment=0,  # 왼쪽 정렬
+                textColor=colors.white,
+                encoding='utf-8',
+                wordWrap='CJK',
+                allowWidows=0,
+                allowOrphans=0
+            )
             
-            # 헤더 추가
-            if header:
-                self.pdf.setFont('NotoSansKR', 10)
-                
-                # 페이지 넘김 체크
-                if self.y - row_height < self.margin:
-                    self.add_page()
-                
-                for i, col in enumerate(header):
-                    x = self.margin + (i * col_width)
-                    self.pdf.drawString(x, self.y, str(col))
-                self.y -= row_height
+            # 본문 스타일 설정
+            body_style = ParagraphStyle(
+                'TooltipBody',
+                parent=self.styles['Normal'],
+                fontName='Pretendard',  # 폰트 변경
+                fontSize=font_size,
+                leading=font_size * 1.5,
+                alignment=0,  # 왼쪽 정렬
+                spaceBefore=3,
+                spaceAfter=3,
+                leftIndent=5,
+                rightIndent=5,
+                encoding='utf-8',
+                wordWrap='CJK',
+                allowWidows=0,
+                allowOrphans=0
+            )
             
-            # 데이터 행 추가
-            self.pdf.setFont('NotoSansKR', 10)
-            for row in data:
-                # 페이지 넘김 체크
-                if self.y - row_height < self.margin:
-                    self.add_page()
-                    # 헤더가 있으면 새 페이지에도 헤더 추가
-                    if header:
-                        self.pdf.setFont('NotoSansKR', 10)
-                        for i, col in enumerate(header):
-                            x = self.margin + (i * col_width)
-                            self.pdf.drawString(x, self.y, str(col))
-                        self.y -= row_height
-                        self.pdf.setFont('NotoSansKR', 10)
+            # 특수 문자 처리를 위한 텍스트 전처리
+            def preprocess_text(text):
+                # 특수 문자 매핑 정의 (수정된 버전)
+                char_map = {
+                    '–': '-',    # en dash를 일반 하이픈으로
+                    '—': '-',    # em dash를 일반 하이픈으로
+                    '−': '-',    # 유니코드 마이너스를 일반 하이픈으로
+                    '"': '"',    # 직선형 따옴표를 곡선형으로
+                    '"': '"',
+                    "'": "'",    # 직선형 작은따옴표를 곡선형으로
+                    "'": "'",
+                    '...': '…',  # 마침표 3개를 말줄임표로
+                    '©': '(c)',  # 저작권 기호
+                    '®': '(R)',  # 등록 상표
+                    '™': '(TM)', # 상표
+                    '•': '-',    # 글머리 기호를 하이픈으로
+                    '·': '-',    # 가운뎃점을 하이픈으로
+                    '×': 'x',    # 곱하기 기호를 x로
+                    '÷': '/',    # 나누기 기호를 /로
+                    '±': '+-',   # 플러스마이너스
+                    '≠': '!=',   # 같지 않음
+                    '≤': '<=',   # 작거나 같음
+                    '≥': '>=',   # 크거나 같음
+                    '∞': 'inf',  # 무한대
+                    '°': 'deg',  # 도
+                    '′': "'",    # 프라임
+                    '″': '"',    # 더블 프라임
+                    '→': '->',   # 화살표
+                    '←': '<-',
+                    '↑': '^',
+                    '↓': 'v',
+                    '⇒': '=>',   # 이중 화살표
+                    '⇐': '<=',
+                    '⇔': '<=>',
+                }
                 
-                for i, cell in enumerate(row):
-                    x = self.margin + (i * col_width)
-                    self.pdf.drawString(x, self.y, str(cell))
-                self.y -= row_height
+                # 특수 문자 변환
+                for old, new in char_map.items():
+                    text = text.replace(old, new)
+                
+                # 연속된 공백 정리
+                text = ' '.join(text.split())
+                
+                # 줄바꿈 문자 정리
+                text = text.replace('\r\n', '\n').replace('\r', '\n')
+                
+                # HTML 엔티티 디코딩
+                text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>')
+                
+                return text
+                
+            # 헤더와 본문 Paragraph 객체 생성
+            header = Paragraph(preprocess_text(header_text), header_style)
             
-            self.y -= 10  # 표 아래 여백
+            # 텍스트 줄바꿈 처리
+            paragraphs = []
+            for line in text.split('\n'):
+                if line.strip():  # 빈 줄 제외
+                    paragraphs.append(Paragraph(preprocess_text(line), body_style))
+            
+            # 테이블 데이터 준비 (2행 1열)
+            table_data = [
+                [header],  # 헤더 행
+                [paragraphs[0] if paragraphs else '']  # 첫 번째 문단
+            ]
+            
+            # 나머지 문단들을 추가
+            for p in paragraphs[1:]:
+                table_data.append([p])
+            
+            # 테이블 너비 계산 (문서 너비에서 좌우 여백 고려)
+            available_width = A4[0] - 60*mm  # 좌우 각각 10mm 추가 여백
+            
+            # 테이블 생성
+            table = Table(table_data, colWidths=[available_width])
+            table.hAlign = 'CENTER'  # 테이블 중앙 정렬
+            
+            # 테이블 스타일 설정
+            table_style = TableStyle([
+                # 전체 테두리
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.gray),
+                
+                # 헤더 행 스타일
+                ('BACKGROUND', (0, 0), (-1, 0), colors.black),  # 헤더 배경색
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),  # 헤더 텍스트 색상
+                
+                # 본문 행 스타일
+                ('BACKGROUND', (0, 1), (-1, -1), background_color),  # 본문 배경색
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),  # 본문 텍스트 색상
+                
+                # 정렬 설정
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),  # 전체 왼쪽 정렬
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),  # 수직 중앙 정렬
+                
+                # 패딩 설정
+                ('LEFTPADDING', (0, 0), (-1, -1), 10),  # 왼쪽 패딩
+                ('RIGHTPADDING', (0, 0), (-1, -1), 10),  # 오른쪽 패딩
+                ('TOPPADDING', (0, 0), (-1, 0), 5),  # 헤더 상단 패딩
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 5),  # 헤더 하단 패딩
+                ('TOPPADDING', (0, 1), (-1, -1), 3),  # 본문 상단 패딩
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 3),  # 본문 하단 패딩
+            ])
+            
+            table.setStyle(table_style)
+            
+            # 테이블 추가
+            self.elements.append(table)
+            self.elements.append(Spacer(1, 8*mm))  # 툴팁 아래 여백
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to add tooltip: {str(e)}")
+            raise
+
+    def add_table(self, data, header=None):
+        """Add a table to the document."""
+        try:
+            import pandas as pd
+            import re
+            
+            # 특수문자 처리 함수
+            def clean_text(text):
+                if pd.isna(text):
+                    return ''
+                text = str(text).strip()
+                text = re.sub(r'[^\uAC00-\uD7A3a-zA-Z0-9\s\.,\-\(\)/%]', '', text)
+                return text
+            
+            # DataFrame 변환 및 데이터 전처리
+            if isinstance(data, pd.DataFrame):
+                df = data.applymap(clean_text)
+            else:
+                if header:
+                    df = pd.DataFrame(data, columns=header)
+                else:
+                    df = pd.DataFrame(data)
+                df = df.applymap(clean_text)
+            
+            # 컬럼 너비 계산 수정
+            available_width = A4[0] - 60*mm  # 좌우 각각 10mm 추가 여백
+            col_width = available_width / len(df.columns)
+            
+            # 데이터를 Paragraph 객체로 변환
+            def to_paragraph(text):
+                style = ParagraphStyle(
+                    'TableCell',
+                    fontName='Pretendard',
+                    fontSize=10,
+                    leading=12,
+                    alignment=1,
+                    wordWrap='CJK'
+                )
+                return Paragraph(str(text), style)
+            
+            # 테이블 데이터 준비
+            table_data = []
+            if header is not None:
+                table_data.append([to_paragraph(col) for col in df.columns])
+            for _, row in df.iterrows():
+                table_data.append([to_paragraph(cell) for cell in row])
+            
+            # 테이블 생성
+            table = Table(table_data, colWidths=[col_width] * len(df.columns))
+            table.hAlign = 'CENTER'  # 테이블 중앙 정렬
+            
+            # 테이블 스타일 설정
+            style = [
+                ('FONT', (0, 0), (-1, -1), 'Pretendard'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('PADDING', (0, 0), (-1, -1), 6),
+                ('WORDWRAP', (0, 0), (-1, -1), True),
+            ]
+            
+            if header is not None:
+                style.extend([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ])
+            
+            table.setStyle(TableStyle(style))
+            self.elements.append(table)
+            self.elements.append(Spacer(1, 10*mm))
             
         except Exception as e:
             print(f"Error in add_table: {str(e)}")
+            raise
 
-    def save(self, filename: str):
-        """Save the PDF document to a file."""
+    def add_image(self, image_path: str, width: float = None, height: float = None, scale_small_images: bool = False):
+        """
+        Add an image to the PDF document.
+        """
         try:
-            # 디렉토리가 없으면 생성
-            os.makedirs(os.path.dirname(os.path.abspath(filename)), exist_ok=True)
+            temp_file = None
             
-            # PDF 저장
-            self.pdf.save()
+            try:
+                # 페이지 최대 너비와 높이 (여백 고려)
+                max_width = A4[0] - 60*mm  # 좌우 각각 30mm 여백
+                max_height = A4[1] - 90*mm  # 상하 여백을 더 넉넉하게 설정
+                
+                # 이미지 크기 계산
+                from PIL import Image as PILImage
+                img = PILImage.open(image_path)
+                img_w, img_h = img.size
+                
+                # 이미지 비율 계산
+                aspect_ratio = img_w / img_h
+                
+                # 이미지 크기 조정
+                if width is None and height is None:
+                    # 먼저 높이를 기준으로 조정
+                    if img_h > max_height:
+                        height = max_height
+                        width = height * aspect_ratio
+                    else:
+                        height = img_h
+                        width = img_w
+                    
+                    # 너비가 최대 너비를 초과하는 경우 다시 조정
+                    if width > max_width:
+                        width = max_width
+                        height = width / aspect_ratio
+                    
+                    # 최종 안전 검사
+                    if height > max_height:
+                        height = max_height
+                        width = height * aspect_ratio
+                    
+                    # 최소 크기 설정 (너무 작은 이미지 방지)
+                    if scale_small_images:
+                        min_width = max_width * 0.3
+                        if width < min_width:
+                            width = min_width
+                            height = width / aspect_ratio
+                
+                # reportlab Image 객체 생성
+                from reportlab.platypus import Image as RLImage
+                img = RLImage(image_path, width=width, height=height)
+                img.hAlign = 'CENTER'
+                
+                # 이미지 추가
+                self.elements.append(img)
+                self.elements.append(Spacer(1, 10*mm))
+                
+            finally:
+                if temp_file and os.path.exists(temp_file):
+                    os.unlink(temp_file)
+                    
+        except Exception as e:
+            print(f"[ERROR] Failed to add image: {str(e)}")
+
+    def add_spacing(self, points: int):
+        """Add vertical spacing."""
+        self.elements.append(Spacer(1, points))
+
+    def add_page_break(self):
+        """Add a page break to the document."""
+        try:
+            self.elements.append(PageBreak())
+        except Exception as e:
+            print(f"[WARNING] Failed to add page break: {str(e)}")
+
+    def save(self, filename: str, include_toc: bool = False):
+        try:
+            doc = SimpleDocTemplate(
+                filename,
+                pagesize=A4,
+                leftMargin=20*mm,
+                rightMargin=20*mm,
+                topMargin=30*mm,
+                bottomMargin=30*mm
+            )
             
-            # 파일로 저장
-            with open(filename, 'wb') as f:
-                f.write(self.buffer.getvalue())
+            story = []
+            
+            if include_toc:
+                # 목차 제목 추가
+                toc_title = Paragraph("목 차", self.styles['KoreanHeading1'])
+                story.append(toc_title)
+                story.append(Spacer(1, 10*mm))
+                story.append(self.toc)
+                story.append(PageBreak())
+            
+            # 본문 내용 추가
+            story.extend(self.elements)
+            
+            # 문서 빌드
+            doc.multiBuild(
+                story,
+                onFirstPage=self._header_footer,
+                onLaterPages=self._header_footer,
+                canvasmaker=NumberedCanvas
+            )
                 
         except Exception as e:
             print(f"[ERROR] Failed to save PDF: {str(e)}")
             raise
-
-    def _wrap_text(self, text, max_width):
-        """
-        주어진 너비에 맞게 텍스트를 줄바꿈합니다.
         
-        Args:
-            text: 줄바꿈할 텍스트
-            max_width: 최대 너비 (포인트 단위)
-            
-        Returns:
-            줄바꿈된 텍스트 리스트
-        """
-        if not text:
-            return []
-            
-        lines = []
-        for paragraph in text.split('\n'):
-            if not paragraph:
-                lines.append('')
-                continue
-                
-            words = paragraph.split()
-            current_line = []
-            current_width = 0
-            
-            for word in words:
-                word_width = self.pdf.stringWidth(word, 'NotoSansKR', 10)
-                space_width = self.pdf.stringWidth(' ', 'NotoSansKR', 10)
-                
-                if current_width + word_width + (space_width if current_line else 0) <= max_width:
-                    current_line.append(word)
-                    current_width += word_width + (space_width if current_line else 0)
-                else:
-                    if current_line:
-                        lines.append(' '.join(current_line))
-                    current_line = [word]
-                    current_width = word_width
-            
-            if current_line:
-                lines.append(' '.join(current_line))
-                
-        return lines
+
+class NumberedCanvas(canvas.Canvas):
+    """페이지 번호를 위한 캔버스"""
+    def __init__(self, *args, **kwargs):
+        canvas.Canvas.__init__(self, *args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        """add page info to each page (page x of y)"""
+        num_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self.draw_page_number(num_pages)
+            canvas.Canvas.showPage(self)
+        canvas.Canvas.save(self)
+
+    def draw_page_number(self, page_count):
+        """페이지 번호 그리기"""
+        self.setFont("Pretendard", 9)
+        self.drawCentredString(
+            A4[0]/2,
+            10*mm,
+            f"- {self._pageNumber} -"
+        )
 
 # ============================================================================
 # 파일 시스템 기본 유틸리티 (File System Core Utilities)
@@ -1845,10 +3062,14 @@ def list_directory(path: str) -> List[str]:
     """
     return os.listdir(path)
 
-def read_file(path: str) -> Union[str, pd.DataFrame, bytes]:
+def read_file(path: str, sheet_name: str = None) -> Union[str, pd.DataFrame, bytes]:
     """
     Read and return the contents of a file based on its extension.
     파일 확장자에 따라 내용을 읽어 반환합니다.
+
+    Args:
+        path (str): Path to the file to read
+        sheet_name (str, optional): Sheet name for Excel files. Defaults to None.
     """
     file_ext = os.path.splitext(path)[1].lower()
     
@@ -1885,8 +3106,8 @@ def read_file(path: str) -> Union[str, pd.DataFrame, bytes]:
 
         # Pandas-supported files
         PANDAS_EXTENSIONS = {
-            '.xlsx': pd.read_excel,  # Excel files
-            '.xls': pd.read_excel,
+            '.xlsx': lambda p: pd.read_excel(p, sheet_name=sheet_name) if sheet_name else pd.read_excel(p),  # Excel files
+            '.xls': lambda p: pd.read_excel(p, sheet_name=sheet_name) if sheet_name else pd.read_excel(p),
             '.csv': pd.read_csv,     # CSV files
             '.json': pd.read_json,   # JSON files
             '.html': pd.read_html,   # HTML files
@@ -2683,6 +3904,7 @@ def extract_from_pdf(pdf_path: str) -> str:
     """
     try:
         from PyPDF2 import PdfReader
+        import re
         
         # 파일 존재 여부 확인
         if not os.path.exists(pdf_path):
@@ -2702,11 +3924,65 @@ def extract_from_pdf(pdf_path: str) -> str:
         all_text = []
         total_pages = len(reader.pages)
         
+        # 텍스트 정제를 위한 패턴들
+        cleanup_patterns = [
+            # 목차 관련 패턴
+            (r'\*{2,}', ''),  # 연속된 별표(*) 제거
+            (r'\.{2,}', ''),  # 연속된 점(...) 제거
+            (r'_{2,}', ''),   # 연속된 밑줄(_) 제거
+            (r'={2,}', ''),   # 연속된 등호(=) 제거
+            (r'-{2,}', '-'),  # 연속된 하이픈(-)을 하나로
+            (r'~{2,}', ''),   # 연속된 물결표(~) 제거
+            
+            # 제어 문자 및 특수 문자 패턴
+            (r'[\u0000-\u0008\u000B\u000C\u000E-\u001F]', ''),  # 제어 문자 제거
+            (r'[\u2000-\u200F\u2028-\u202F]', ' '),  # 특수 공백 및 제어 문자
+            (r'[\uFFF0-\uFFFF]', ''),  # 특수 유니코드 영역
+            (r'[\u0080-\u00FF]', ''),  # 확장 ASCII 영역
+            (r'[\u0100-\u017F]', ''),  # 라틴 확장 문자
+            (r'[\u0180-\u024F]', ''),  # 라틴 확장 추가
+            (r'[\u0250-\u02AF]', ''),  # IPA 확장
+            (r'[\u0300-\u036F]', ''),  # 결합 발음 구별 부호
+            (r'[\u2500-\u257F]', ''),  # 박스 드로잉
+            (r'[\u2580-\u259F]', ''),  # 블록 요소
+            (r'[\u3040-\u309F]', ''),  # 히라가나
+            (r'[\u30A0-\u30FF]', ''),  # 가타카나
+            (r'[\u31F0-\u31FF]', ''),  # 가타카나 음성 확장
+            (r'[\uFF00-\uFFEF]', ''),  # 전각 문자
+            (r'[\u3000-\u303F]', ' '),  # CJK 기호 및 문장 부호
+            
+            # 한글과 기본 문자 처리
+            (r'[\uAC00-\uD7AF가-힣]', lambda m: m.group()),  # 한글은 유지
+            (r'[^\uAC00-\uD7AF가-힣\w\s.,!?():\-\[\]\/]', ' '),  # 나머지 문자는 공백으로
+            
+            # 공백 정리
+            (r'\s+', ' '),  # 연속된 공백을 하나로
+        ]
+        
         for i, page in enumerate(reader.pages, 1):
             print(f"Processing page {i}/{total_pages}...")
             text = page.extract_text()
+            
+            # 텍스트 정제
             if text.strip():
-                all_text.append(f"[Page {i}]\n{text.strip()}")
+                # 패턴 적용
+                for pattern, replacement in cleanup_patterns:
+                    if callable(replacement):
+                        text = re.sub(pattern, replacement, text)
+                    else:
+                        text = re.sub(pattern, replacement, text)
+                
+                # 줄바꿈 처리
+                text = re.sub(r'\n\s*\n', '\n\n', text)  # 빈 줄 정리
+                text = re.sub(r'([^.])\n([^\n])', r'\1 \2', text)  # 문장 중간 줄바꿈 처리
+                
+                # 목차 번호와 내용 사이의 공백 정리
+                text = re.sub(r'(\d+[\.\)］\]])\s*', r'\1 ', text)  # 목차 번호 뒤 공백 정리
+                
+                # 최종 정제
+                text = text.strip()
+                if text:
+                    all_text.append(f"[Page {i}]\n{text}")
         
         if not all_text:
             print("Warning: No text content found in PDF")
@@ -3128,7 +4404,7 @@ def create_matplotlib(figsize: tuple = (6, 4)) -> tuple[plt.Figure, plt.Axes, fm
     """
     try:
         # 한글 폰트 설정
-        font_path = safe_path_join(os.path.expanduser("~"), ".airun", "NotoSansKR-Regular.ttf")
+        font_path = safe_path_join(os.path.expanduser("~"), ".airun", "Pretendard-Regular.ttf")
         if not os.path.exists(font_path):
             raise FileNotFoundError("Korean font file not found. Please ensure airun is properly installed.")
         
@@ -3348,10 +4624,19 @@ def get_selenium_driver():
             chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            _chrome_driver_path = ChromeDriverManager().install()
-            service = Service(_chrome_driver_path)
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            
+        try:
+            # 먼저 시스템에 설치된 ChromeDriver 사용 시도
+            driver = webdriver.Chrome(options=chrome_options)
+        except:
+            try:
+                # 실패하면 webdriver_manager 사용
+                _chrome_driver_path = ChromeDriverManager().install()
+                service = Service(_chrome_driver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+            except Exception as e:
+                print(f"[ERROR] ChromeDriver 초기화 실패: {str(e)}", file=sys.stderr)
+                return None
+        
         driver.set_page_load_timeout(30)
         return driver
         
@@ -3895,6 +5180,10 @@ def search_naver(query: str, max_results: int = None) -> List[dict]:
         
         # 검색 결과 요소 찾기
         search_results = driver.find_elements(By.CSS_SELECTOR, "div.news_wrap")
+
+        if not search_results:
+            debug_print("[DEBUG] 검색 결과가 없습니다.")
+            return []        
         
         limit = max_results if max_results is not None else 10
         for result in search_results[:limit]:
@@ -3970,6 +5259,9 @@ def search_google(query: str, max_results: int = None) -> List[dict]:
             search_results = driver.find_elements(By.CSS_SELECTOR, "div.xpd")  # 모바일 버전 선택자
         
         # debug_print(f"[DEBUG] Google 검색 결과 {len(search_results)}개 발견")
+        if not search_results:  # 두 선택자 모두에서 결과가 없는 경우
+            debug_print("[DEBUG] 검색 결과가 없습니다.")
+            return []        
         
         limit = max_results if max_results is not None else 10
         for result in search_results[:limit]:
@@ -4082,8 +5374,8 @@ def search_daum(query: str, max_results: int = 5) -> List[dict]:
                     debug_print(f"[DEBUG] 다음 검색 결과 항목 처리 중 오류: {str(e)}")
                     continue
                     
-        except TimeoutException:
-            debug_print("[DEBUG] 다음 검색 결과 로딩 시간 초과")
+        # except TimeoutException:
+        #     debug_print("[DEBUG] 다음 검색 결과 로딩 시간 초과")
         except Exception as e:
             debug_print(f"[DEBUG] 다음 검색 결과 처리 중 오류: {str(e)}")
         
@@ -5169,16 +6461,9 @@ async def test_deepl_translator():
 # 테스트 실행을 위한 코드
 if __name__ == "__main__":
     import asyncio
-    import sys
     
-    if len(sys.argv) > 3:
-        input_file = sys.argv[1]
-        output_file = sys.argv[2]
-        target_language = sys.argv[3]
-        run_translation(input_file, output_file, target_language)
-    else:
-        # 테스트 코드 실행
-        asyncio.run(test_deepl_translator())
+    # 테스트 코드 실행
+    asyncio.run(test_deepl_translator())
 
 def clean_hwp_text(text):
     """
@@ -5383,7 +6668,7 @@ def summarize_with_openai(content: str, max_length: int = None) -> str:
         client = OpenAI()  # 환경 변수에서 API 키를 자동으로 가져옴
         
         # 모델 설정
-        model = "gpt-3.5-turbo"
+        model = "gpt-4o-mini"
         max_tokens = min(max_length or 4000, 4000)
         
         # 요약 요청
@@ -5407,3 +6692,4 @@ def summarize_with_openai(content: str, max_length: int = None) -> str:
     except Exception as e:
         print(f"[ERROR] Summarization failed: {str(e)}")
         raise
+
