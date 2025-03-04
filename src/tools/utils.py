@@ -149,6 +149,8 @@ REQUIRED_PACKAGES = [
     ("olefile", "olefile"),  
     ("python-pptx", "pptx"),
     ("PyPDF2", "PyPDF2"),
+    ("pdfminer.six", "pdfminer"),  # PDF 텍스트 추출을 위한 패키지
+    ("pycryptodome", "Crypto"),    # PDF 암호화 처리를 위한 패키지
     ("Pillow", "PIL"),
     ("svglib", "svglib"),
     ("reportlab", "reportlab"),
