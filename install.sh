@@ -161,6 +161,7 @@ install_binary() {
     local tmp_dir
     local install_dir
     local binary_name="codai"
+    local local_binary="target/x86_64-unknown-linux-gnu/release/codai"
     
     # Determine installation directory
     if [ "$(id -u)" -eq 0 ]; then
@@ -180,14 +181,33 @@ install_binary() {
     tmp_dir=$(mktemp -d)
     trap 'rm -rf "$tmp_dir"' EXIT
 
-    print_status "Downloading codai for ${os_arch}..."
-    
-    # Get the latest release URL
-    local latest_release_url="https://github.com/hamonikr/codai/releases/latest/download/codai-${os_arch}"
-    
-    # Download binary
-    if ! curl -sSL "$latest_release_url" -o "$tmp_dir/$binary_name"; then
-        print_error "Failed to download codai"
+    # Check if local binary exists
+    if [ -f "$local_binary" ]; then
+        print_status "Using locally built binary from $local_binary"
+        cp "$local_binary" "$tmp_dir/$binary_name"
+    else
+        print_status "Downloading codai for ${os_arch}..."
+        
+        # Get the latest release URL
+        local latest_release_url="https://github.com/hamonikr/codai/releases/latest/download/codai-${os_arch}"
+        
+        # Download binary
+        if ! curl -sSL "$latest_release_url" -o "$tmp_dir/$binary_name"; then
+            print_error "Failed to download codai"
+            exit 1
+        fi
+    fi
+
+    # Verify downloaded file
+    if [ ! -s "$tmp_dir/$binary_name" ]; then
+        print_error "Binary file is empty"
+        exit 1
+    fi
+
+    # Check if file is a valid binary
+    if ! file "$tmp_dir/$binary_name" | grep -q "ELF"; then
+        print_error "File is not a valid binary"
+        cat "$tmp_dir/$binary_name"
         exit 1
     fi
 
